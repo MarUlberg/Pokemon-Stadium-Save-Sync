@@ -103,9 +103,9 @@ labels = {
     "base_dir": "RetroArch folder:",
     "gb_dir": "GB save subfolder:",
     "gba_dir": "GBA save subfolder:",
-    "sav_dir": "TransferPak save subfolder:",
-    "Stadium 1": "Pokemon Stadium ROM:",
-    "Stadium 2": "Pokemon Stadium 2 ROM:",
+    "sav_dir": "TransferPak subfolder:",
+    "Stadium 1": "Pkmn Stadium ROM:",
+    "Stadium 2": "Pkmn Stadium 2 ROM:",
 }
 
 for idx, (key, value) in enumerate(data.items()):
