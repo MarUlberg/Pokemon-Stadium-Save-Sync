@@ -1,29 +1,27 @@
 import os
+
 import shutil
 
 # Set to True to keep the window open after the program finishes
-stay_open = True
+stay_open = False
 
 # Set save port
-RetroarchTransferPak1 = "Blue" # Set saveslot you want Retroarch to use with Pokemon Stadium
-RetroarchTransferPak2 = "Crystal" # Set saveslot you want Retroarch to use with Pokemon Stadium 2
+RetroarchTransferPak1 = "Blue"
+RetroarchTransferPak2 = "Crystal"
 DolphinPort2 = "Emerald"
 DolphinPort3 = "Sapphire"
 DolphinPort4 = "Ruby"
 
 # Base directories
-base_dir = "H:/LaunchBox/!Emulators/RetroArch"    # Set path for RetroArch
-gb_dir = os.path.join(base_dir, "saves")           # Set subfolder for GameBoy .srm files
-gba_dir = os.path.join(base_dir, "saves")         # Set subfolder for GameBoy Advance .srm files
+base_dir = "H:/LaunchBox/!Emulators/RetroArch"
+gb_dir = os.path.join(base_dir, "saves/Nintendo - Game Boy") # Set subfolder for GameBoy .srm files
+gba_dir = os.path.join(base_dir, "saves/Nintendo - Game Boy Advance") # Set subfolder for GameBoyAdvance .srm files
 sav_dir = os.path.join(base_dir, "saves/stadium")  # Set subfolder with Pokemon Stadium ROM
 
 # Define slot mappings
-gba_slots = {
-    "Ruby": "Pokemon - Ruby Version (USA, Europe) (Rev 2).srm",
-    "Sapphire": "Pokemon - Sapphire Version (USA, Europe) (Rev 2).srm",
-    "Emerald": "Pokemon - Emerald Version (USA, Europe).srm",
-    "FireRed": "Pokemon - FireRed Version (USA, Europe).srm",
-    "LeafGreen": "Pokemon - LeafGreen Version (USA, Europe) (Rev 1).srm",
+n64_roms = {
+    "Stadium 1": "Pokemon Stadium (USA).n64",
+    "Stadium 2": "Pokemon Stadium 2 (USA).n64"
 }
 gb_slots = {
     "Green": "Pokemon - Green Version (Blue Version (USA, Europe) (SGB Enhanced))(patched).srm",
@@ -34,9 +32,12 @@ gb_slots = {
     "Silver": "Pokemon - Silver Version (USA, Europe) (SGB Enhanced) (GB Compatible).srm",
     "Crystal": "Pokemon - Crystal Version (USA, Europe) (Rev 1).srm",
 }
-n64_roms = {
-    "Stadium 1": "Pokemon Stadium (USA).n64",
-    "Stadium 2": "Pokemon Stadium 2 (USA).n64"
+gba_slots = {
+    "Ruby": "Pokemon - Ruby Version (USA, Europe) (Rev 2).srm",
+    "Sapphire": "Pokemon - Sapphire Version (USA, Europe) (Rev 2).srm",
+    "Emerald": "Pokemon - Emerald Version (USA, Europe).srm",
+    "FireRed": "Pokemon - FireRed Version (USA, Europe).srm",
+    "LeafGreen": "Pokemon - LeafGreen Version (USA, Europe) (Rev 1).srm",
 }
 
 def get_last_modified_time(file_path):
