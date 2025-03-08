@@ -3,14 +3,11 @@ import os
 import shutil
 
 # Set to True to keep the window open after the program finishes
-stay_open = False
+stay_open = True
 
 # Save Port
-RetroarchTransferPak1 = ""
-RetroarchTransferPak2 = ""
-DolphinPort2 = ""
-DolphinPort3 = ""
-DolphinPort4 = ""
+RetroarchTransferPak1 = "" # Green, Red, Blue or Yellow
+RetroarchTransferPak2 = "" # Green, Red, Blue, Yellow, Gold, Silver or Crystal
 
 # Directories
 base_dir = "H:/LaunchBox/!Emulators/RetroArch"
@@ -28,7 +25,7 @@ gb_slots = {
     "Green": "Pokemon - Green Version (Blue Version (USA, Europe) (SGB Enhanced))(patched).srm",
     "Red": "Pokemon - Red Version (USA, Europe) (SGB Enhanced).srm",
     "Blue": "Pokemon - Blue Version (USA, Europe) (SGB Enhanced).srm",
-    "Yellow": "Pokemon - Yellow Version - Special Pikachu Edition (Pokemon Playable Yellow) (v1.0) (alt).srm",
+    "Yellow": "Pokemon - Yellow Version - Special Pikachu Edition (v1.0) (alt).srm",
     "Gold": "Pokemon - Gold Version (USA, Europe) (SGB Enhanced) (GB Compatible).srm",
     "Silver": "Pokemon - Silver Version (USA, Europe) (SGB Enhanced) (GB Compatible).srm",
     "Crystal": "Pokemon - Crystal Version (USA, Europe) (Rev 1).srm",
@@ -47,11 +44,11 @@ def get_last_modified_time(file_path):
 def delete_and_replace(slot, srm, sav):
     try:
         if not os.path.exists(srm):
-            print(f"{slot}: srm does not exist.")
+            print(f"{slot}: .srm does not exist.")
             return
         
         if not os.path.exists(sav):
-            print(f"{slot}: sav was missing, creating a new copy from srm.")
+            print(f"{slot}: .sav was missing, creating a new copy from .srm.")
             shutil.copy2(srm, sav)
             return
 
@@ -61,11 +58,11 @@ def delete_and_replace(slot, srm, sav):
 
         # Determine which file is older
         if srm_modified_time > sav_modified_time:
-            print(f"{slot}: sav is older. Deleting and replacing it with srm.")
+            print(f"{slot}: .sav is older. Deleting and replacing it with .srm.")
             os.remove(sav)
             shutil.copy2(srm, sav)
         else:
-            print(f"{slot}: srm is older. Deleting and replacing it with sav.")
+            print(f"{slot}: .srm is older. Deleting and replacing it with .sav.")
             os.remove(srm)
             shutil.copy2(sav, srm)
 
@@ -74,7 +71,7 @@ def delete_and_replace(slot, srm, sav):
         print(f"{slot}: An error occurred with srm and sav: {e}")
 
 # Check for duplicate game assignments
-assigned_games = [game for game in [RetroarchTransferPak1, RetroarchTransferPak2, DolphinPort2, DolphinPort3, DolphinPort4] if game]
+assigned_games = [game for game in [RetroarchTransferPak1, RetroarchTransferPak2] if game]
 if len(assigned_games) != len(set(assigned_games)):
     print("Error: Multiple ports are assigned to the same game. Please check your configuration.")
     print('Press Enter to exit...')
@@ -95,7 +92,7 @@ if RetroarchTransferPak2 and not n64_roms.get("Stadium 2"):
     exit(1)
 
 # Run the function for each GB slot
-assigned_games = [game for game in [RetroarchTransferPak1, RetroarchTransferPak2, DolphinPort2, DolphinPort3, DolphinPort4] if game]
+assigned_games = [game for game in [RetroarchTransferPak1, RetroarchTransferPak2] if game]
 if len(assigned_games) != len(set(assigned_games)):
     print("Error: Multiple ports are assigned to the same game. Please check your configuration.")
     print('Press Enter to exit...')
@@ -123,13 +120,7 @@ for game_name, srm_filename in gb_slots.items():
 # Run the function for each GBA slot
 for gba_slot, srm_filename in gba_slots.items():
     srm_path = os.path.join(gba_dir, srm_filename)
-    sav_filename = srm_filename.replace(".srm", ".sav")
-    
-    # Adjust sav filename for the DolphinPort
-    for port, assigned_slot in {"2": DolphinPort2, "3": DolphinPort3, "4": DolphinPort4}.items():
-        if gba_slot == assigned_slot:
-            sav_filename = sav_filename.replace(".sav", f"-{port}.sav")
-    
+    sav_filename = srm_filename.replace(".srm", "-2.sav")
     sav_path = os.path.join(sav_dir, sav_filename)
     delete_and_replace(gba_slot, srm_path, sav_path)
 
