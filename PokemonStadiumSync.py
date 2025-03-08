@@ -5,28 +5,29 @@ import shutil
 # Set to True to keep the window open after the program finishes
 stay_open = False
 
-# Set save port
-RetroarchTransferPak1 = "Blue"
-RetroarchTransferPak2 = "Crystal"
-DolphinPort2 = "Emerald"
-DolphinPort3 = "Sapphire"
-DolphinPort4 = "Ruby"
+# Save Port
+RetroarchTransferPak1 = ""
+RetroarchTransferPak2 = ""
+DolphinPort2 = ""
+DolphinPort3 = ""
+DolphinPort4 = ""
 
-# Base directories
+# Directories
 base_dir = "H:/LaunchBox/!Emulators/RetroArch"
 gb_dir = os.path.join(base_dir, "saves/Nintendo - Game Boy") # Set subfolder for GameBoy .srm files
 gba_dir = os.path.join(base_dir, "saves/Nintendo - Game Boy Advance") # Set subfolder for GameBoyAdvance .srm files
 sav_dir = os.path.join(base_dir, "saves/stadium")  # Set subfolder with Pokemon Stadium ROM
 
-# Define slot mappings
+# Stadium ROMs
 n64_roms = {
     "Stadium 1": "Pokemon Stadium (USA).n64",
     "Stadium 2": "Pokemon Stadium 2 (USA).n64"
 }
+# Save Slots
 gb_slots = {
     "Green": "Pokemon - Green Version (Blue Version (USA, Europe) (SGB Enhanced))(patched).srm",
     "Red": "Pokemon - Red Version (USA, Europe) (SGB Enhanced).srm",
-    "Blue": "Pokemon - Blue Version (USA, Europe) (SGB Enhanced) (Pokemon Playable Blue)(patched).srm",
+    "Blue": "Pokemon - Blue Version (USA, Europe) (SGB Enhanced).srm",
     "Yellow": "Pokemon - Yellow Version - Special Pikachu Edition (Pokemon Playable Yellow) (v1.0) (alt).srm",
     "Gold": "Pokemon - Gold Version (USA, Europe) (SGB Enhanced) (GB Compatible).srm",
     "Silver": "Pokemon - Silver Version (USA, Europe) (SGB Enhanced) (GB Compatible).srm",
@@ -37,7 +38,7 @@ gba_slots = {
     "Sapphire": "Pokemon - Sapphire Version (USA, Europe) (Rev 2).srm",
     "Emerald": "Pokemon - Emerald Version (USA, Europe).srm",
     "FireRed": "Pokemon - FireRed Version (USA, Europe).srm",
-    "LeafGreen": "Pokemon - LeafGreen Version (USA, Europe) (Rev 1).srm",
+    "LeafGreen": "Pokemon - LeafGreen Version (USA, Europe).srm",
 }
 
 def get_last_modified_time(file_path):
@@ -110,7 +111,7 @@ for game_name, srm_filename in gb_slots.items():
     slot_number = slot_numbers.get(game_name, "X")
     sav_filename = f"PkmnTransferPak{slot_number} {game_name}.sav"
     
-    # Adjust sav filename for the main RetroarchTransferPak slot
+    # Adjust sav filename for the RetroarchTransferPak Port
     if game_name == RetroarchTransferPak1:
         sav_filename = n64_roms["Stadium 1"] + ".sav"
     elif game_name == RetroarchTransferPak2:
@@ -124,7 +125,7 @@ for gba_slot, srm_filename in gba_slots.items():
     srm_path = os.path.join(gba_dir, srm_filename)
     sav_filename = srm_filename.replace(".srm", ".sav")
     
-    # Check if this gba_slot is assigned to a DolphinPort
+    # Adjust sav filename for the DolphinPort
     for port, assigned_slot in {"2": DolphinPort2, "3": DolphinPort3, "4": DolphinPort4}.items():
         if gba_slot == assigned_slot:
             sav_filename = sav_filename.replace(".sav", f"-{port}.sav")
@@ -132,14 +133,13 @@ for gba_slot, srm_filename in gba_slots.items():
     sav_path = os.path.join(sav_dir, sav_filename)
     delete_and_replace(gba_slot, srm_path, sav_path)
 
-# Check for n64 rom files (only if corresponding n64_roms entry is not empty)
+# Check for ROM files 
 for key, rom in n64_roms.items():
     if rom.strip():
         rom_file = os.path.join(sav_dir, rom)
         if not os.path.exists(rom_file):
             print(f"Warning: {rom} is missing!")
 
-# Check for gb rom files (only if corresponding n64_roms entry is not empty)
 for key, rom in n64_roms.items():
     if rom.strip():
         gb_file = os.path.join(sav_dir, rom + ".gb")
