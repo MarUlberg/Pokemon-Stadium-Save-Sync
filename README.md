@@ -3,9 +3,13 @@ A tool created to solve one simple problem: Retroarch can only save to .srm, but
 It compairs the srm and sav files and replace whichever is older with whichever is newer. Use the UI file for easier setup.
 
 Step 1: Backup all your savefiles!
+
 Step 2: Create TransferPak subfolder somewhere within your RetroArch folder (default is "RetroArch/saves/TransferPak"). This is where the .sav files will be stored.
+
 Step 3: Place Pokemon Stadium ROM file in the newly created folder, along with the desired Game Boy ROM.
+
 Step 4: Rename the Game Buy ROM to the same as the Stadium ROM (Pokemon Stadium (USA).n64.gb)
+
 Step 5: Run PokemonStadiumSyncUI.py to open the setup window.
  - Select the Pokemon game you want to connect to the RetroArch TransferPak.
  - Specify the path for the RetroArch folder.
