@@ -2,88 +2,131 @@ import tkinter as tk
 from tkinter import messagebox, filedialog
 import re
 import os
+import configparser
 
 def find_retroarch_folder():
-    """Finds the RetroArch base directory dynamically, case-insensitive."""
+    """Dynamically locate RetroArch base directory"""
     script_dir = os.path.dirname(os.path.abspath(__file__))  # Get the script's directory
     parts = script_dir.split(os.path.sep)  # Split into folder components
     parts_lower = [part.lower() for part in parts]  # Convert all parts to lowercase
 
     if "retroarch" in parts_lower:
         retroarch_index = parts_lower.index("retroarch")  # Find index of RetroArch (case-insensitive)
-        return os.path.sep.join(parts[:retroarch_index + 1])  # Return corrected path
+        corrected_path = os.path.sep.join(parts[:retroarch_index + 1])
+        return corrected_path.replace("\\", "/")  # Ensure forward slashes
     else:
         print("Unable to locate RetroArch folder.")
         return ""
 
-CONFIG_FILE = "PokemonStadiumSync.py"
+CONFIG_FILE = "PokemonStadiumSync.cfg"
 
-# Load configuration from PokemonStadiumSync.py
 def load_config():
-    config = {}
+    """Load configuration from PokemonStadiumSync.cfg"""
+    config = configparser.ConfigParser()
+    config_data = {}
     try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as file:
-            content = file.read()
-            config["RetroarchTransferPak1"] = re.search(r'RetroarchTransferPak1 = "(.*?)"', content).group(1)
-            config["RetroarchTransferPak2"] = re.search(r'RetroarchTransferPak2 = "(.*?)"', content).group(1)
-            config["base_dir"] = re.search(r'base_dir = "(.*?)"', content).group(1)
-            config["gb_dir"] = re.search(r'gb_dir = os.path.join\(base_dir, "(.*?)"\)', content).group(1)
-            config["gba_dir"] = re.search(r'gba_dir = os.path.join\(base_dir, "(.*?)"\)', content).group(1)
-            config["sav_dir"] = re.search(r'sav_dir = os.path.join\(base_dir, "(.*?)"\)', content).group(1)
-            config["gbrom_dir"] = re.search(r'gbrom_dir = os.path.join\(base_dir, "(.*?)"\)', content).group(1)
-            match = re.search(r'stay_open = (True|False)', content)
-            config["stay_open"] = match and match.group(1) == "True"
+        config.read(CONFIG_FILE, encoding="utf-8")
+        config_data["RetroarchTransferPak1"] = config.get("Ports", "retroarchtransferpak1", fallback="")
+        config_data["RetroarchTransferPak2"] = config.get("Ports", "retroarchtransferpak2", fallback="")
+        config_base_dir = config.get("Directories", "base_dir", fallback="")
+        if os.path.isdir(config_base_dir):
+            config_data["base_dir"] = config_base_dir
+        else:
+            dynamic_base_dir = find_retroarch_folder()
+            config_data["base_dir"] = dynamic_base_dir
+            print(f"Config base_dir invalid or missing. Using dynamically detected: {dynamic_base_dir}")
+        config_data["gb_dir"] = config.get("Directories", "gb_subdir", fallback="")
+        config_data["gba_dir"] = config.get("Directories", "gba_subdir", fallback="")
+        config_data["sav_dir"] = config.get("Directories", "sav_subdir", fallback="")
+        config_data["gbrom_dir"] = config.get("Directories", "gbrom_subdir", fallback="")
+        config_data["stay_open"] = config.getboolean("General", "stay_open", fallback=False)
+        config_data["Stadium 1"] = config.get("StadiumROMs", "stadium 1", fallback="")
+        config_data["Stadium 2"] = config.get("StadiumROMs", "stadium 2", fallback="")
+        for game in ["Green", "Red", "Blue", "Yellow", "Gold", "Silver", "Crystal"]:
+            raw_value = config.get("GBSlots", game.lower(), fallback="")
+            config_data[game] = os.path.splitext(raw_value)[0]
+        for game in ["Ruby", "Sapphire", "Emerald", "FireRed", "LeafGreen"]:
+            raw_value = config.get("GBASlots", game.lower(), fallback="")
+            config_data[game] = os.path.splitext(raw_value)[0]
 
-            
-            # Load slot mappings
-            config["Stadium 1"] = re.search(r'"Stadium 1": "(.*?)"', content).group(1)
-            config["Stadium 2"] = re.search(r'"Stadium 2": "(.*?)"', content).group(1)
-            for slot in ["Green", "Red", "Blue", "Yellow", "Gold", "Silver", "Crystal"]:
-                config[slot] = os.path.splitext(re.search(rf'"{slot}": "(.*?)"', content).group(1))[0]
-            for slot in ["Ruby", "Sapphire", "Emerald", "FireRed", "LeafGreen"]:
-                config[slot] = os.path.splitext(re.search(rf'"{slot}": "(.*?)"', content).group(1))[0]
-                
-            # If base_dir does not exist, try to find it dynamically
-            if not os.path.exists(config["base_dir"]):
-                detected_base_dir = find_retroarch_folder()
-                if detected_base_dir:
-                    config["base_dir"] = detected_base_dir
     except Exception as e:
         messagebox.showerror("Error", f"Failed to load configuration: {e}")
-    return config
 
-# Save configuration to PokemonStadiumSync.py
+    return config_data
+
 def save_config():
+    """Save configuration to PokemonStadiumSync.cfg"""
     try:
+        # Read the existing config file to preserve structure
         with open(CONFIG_FILE, "r", encoding="utf-8") as file:
-            content = file.read()
-        
-        for key, entry in entries.items():
-            if isinstance(entry, tk.StringVar):
-                value = entry.get()
-            else:
-                value = entry.get()
-            
-            if key in ["gb_dir", "gba_dir", "sav_dir", "gbrom_dir"]:
-                content = re.sub(rf'{key} = os.path.join\(base_dir, ".*?"\)', f'{key} = os.path.join(base_dir, "{value}")', content)
-            elif key in ["Green", "Red", "Blue", "Yellow", "Gold", "Silver", "Crystal", "Ruby", "Sapphire", "Emerald", "FireRed", "LeafGreen"]:
-                value += ".srm"
-                content = re.sub(rf'"{key}": ".*?"', f'"{key}": "{value}"', content)
-            else:
-                content = re.sub(rf'{key} = ".*?"', f'{key} = "{value}"', content)
-        
-        if "Stadium 1" in entries:
-            content = re.sub(r'"Stadium 1": ".*?"', f'"Stadium 1": "{entries["Stadium 1"].get()}"', content)
+            lines = file.readlines()
 
-        if "Stadium 2" in entries:
-            content = re.sub(r'"Stadium 2": ".*?"', f'"Stadium 2": "{entries["Stadium 2"].get()}"', content)
-            
-        content = re.sub(r'stay_open = .*', f'stay_open = {str(not stay_open_var.get()).capitalize()}', content)
-        
+        config = configparser.RawConfigParser()  # Use RawConfigParser to avoid formatting changes
+        config.read(CONFIG_FILE, encoding="utf-8")
+
+        # Preserve original sections
+        if "General" in config:
+            config.set("General", "_stay_open", str(stay_open_var.get()))
+
+        if "Ports" in config:
+            config.set("Ports", "RetroarchTransferPak1", entries["RetroarchTransferPak1"].get())
+            config.set("Ports", "RetroarchTransferPak2", entries["RetroarchTransferPak2"].get())
+
+        if "Directories" in config:
+            config.set("Directories", "base_dir", entries["base_dir"].get())
+            config.set("Directories", "gb_subdir", entries["gb_dir"].get())
+            config.set("Directories", "gba_subdir", entries["gba_dir"].get())
+            config.set("Directories", "sav_subdir", entries["sav_dir"].get())
+            config.set("Directories", "gbrom_subdir", entries["gbrom_dir"].get())
+
+        if "StadiumROMs" in config:
+            config.set("StadiumROMs", "Stadium 1", entries["Stadium 1"].get())
+            config.set("StadiumROMs", "Stadium 2", entries["Stadium 2"].get())
+
+        if "GBSlots" in config:
+            for game in ["Green", "Red", "Blue", "Yellow", "Gold", "Silver", "Crystal"]:
+                config.set("GBSlots", game, entries[game].get())
+
+        if "GBASlots" in config:
+            for game in ["Ruby", "Sapphire", "Emerald", "FireRed", "LeafGreen"]:
+                config.set("GBASlots", game, entries[game].get())
+
+        # Write back using manual formatting to preserve original structure
         with open(CONFIG_FILE, "w", encoding="utf-8") as file:
-            file.write(content)
-        
+            for line in lines:
+                stripped = line.strip()
+
+                # Preserve existing comments and blank lines
+                if stripped.startswith(";") or stripped == "":
+                    file.write(line)
+                    continue
+
+                # Write sections as-is
+                if stripped.startswith("[") and stripped.endswith("]"):
+                    file.write(line)
+                    continue
+
+                # Modify only the values that were updated
+                key, sep, value = line.partition("=")
+                key = key.strip()
+
+                if config.has_option("General", key):
+                    file.write(f"{key} = {config.get('General', key)}\n")
+                elif config.has_option("Ports", key):
+                    file.write(f"{key} = {config.get('Ports', key)}\n")
+                elif config.has_option("Directories", key):
+                    file.write(f"{key} = {config.get('Directories', key)}\n")
+                elif config.has_option("StadiumROMs", key):
+                    file.write(f"{key} = {config.get('StadiumROMs', key)}\n")
+                elif config.has_option("GBSlots", key):
+                    file.write(f"{key} = {config.get('GBSlots', key)}\n")
+                elif config.has_option("GBASlots", key):
+                    file.write(f"{key} = {config.get('GBASlots', key)}\n")
+                else:
+                    file.write(line)  # Keep unknown lines untouched
+
         messagebox.showinfo("Success", "Configuration saved successfully!")
+
     except Exception as e:
         messagebox.showerror("Error", f"Failed to save configuration: {e}")
 
@@ -124,9 +167,8 @@ dropdown_options = {
 }
 
 def browse_path(entry, key):
-    """Browse for either a folder or a file, using the path in the textboxes as the starting location."""
-    base_dir = entries["base_dir"].get()  # Get current base_dir from the UI textbox
-    subfolder = entries.get(key, tk.StringVar()).get()  # Get current subfolder value from the UI textbox
+    base_dir = entries["base_dir"].get()
+    subfolder = entries["base_dir"].get()
     
     # If the path is relative, join it with base_dir
     if not os.path.isabs(subfolder):
@@ -186,11 +228,13 @@ for idx, (key, value) in enumerate(data.items()):
         dropdown.grid(row=idx, column=1, padx=10, pady=5, sticky="w")
         entries[key] = var
         
-        note_text = "Select game to use with Pokemon Stadium" if key == "RetroarchTransferPak1" else "Select game to use with Pokemon Stadium 2"
-        tk.Label(root, text=note_text, fg="gray").grid(row=idx, column=1, padx=5, pady=5, sticky="e")
+        note_text = "Select game to use with Pokemon Stadium          " if key == "RetroarchTransferPak1" else "Select game to use with Pokemon Stadium 2       "
+        tk.Label(root, text=note_text, fg="gray").grid(row=idx, column=1, padx=10, pady=0, sticky="e")
+
     else:
         entry = tk.Entry(root, width=60)
         entry.insert(0, value)
+        print(f"Debug: Setting UI field '{key}' with value: {value}")
         entry.grid(row=idx, column=1, padx=10, pady=5)
         entries[key] = entry
         
@@ -202,5 +246,39 @@ stay_open_checkbox.grid(row=len(data), column=0, columnspan=2, pady=10)
 
 save_button = tk.Button(root, text="Save Configuration", command=save_config)
 save_button.grid(row=len(data) + 1, column=0, columnspan=3, pady=10)
+
+# Apply Dark Mode Theme After UI is Created
+def apply_dark_mode():
+    DARK_BG = "#212121"
+    LIGHT_TEXT = "#CCCCCC"
+    ACCENT_COLOR = "#424242"
+    ACTIVE_BG = "#6272A4"
+    FONT = ("Segoe UI", 10)
+
+    root.configure(bg=DARK_BG)
+
+    for widget in root.winfo_children():
+        if isinstance(widget, tk.Label):
+            widget.configure(bg=DARK_BG, fg=LIGHT_TEXT, font=FONT)
+        elif isinstance(widget, tk.Entry):
+            widget.configure(bg=ACCENT_COLOR, fg=LIGHT_TEXT, insertbackground=LIGHT_TEXT, font=FONT,
+                             relief="flat", highlightthickness=1, highlightbackground="#555", highlightcolor="#777")
+        elif isinstance(widget, tk.Button):
+            widget.configure(bg=ACCENT_COLOR, fg=LIGHT_TEXT, activebackground="#555", activeforeground=LIGHT_TEXT, font=FONT, bd=0)
+            widget.bind("<Enter>", lambda e: e.widget.configure(bg="#666"))
+            widget.bind("<Leave>", lambda e: e.widget.configure(bg=ACCENT_COLOR))
+        elif isinstance(widget, tk.Checkbutton):
+            widget.configure(bg=DARK_BG, fg=LIGHT_TEXT, selectcolor=ACCENT_COLOR, activebackground=DARK_BG, font=FONT)
+        elif isinstance(widget, tk.OptionMenu):
+            widget.configure(bg=ACCENT_COLOR, fg=LIGHT_TEXT, activebackground="#555", activeforeground=LIGHT_TEXT, font=FONT, bd=0)
+            widget["menu"].configure(bg=ACCENT_COLOR, fg=LIGHT_TEXT, activebackground="#666", activeforeground=LIGHT_TEXT, font=FONT)
+
+
+    for widget in root.winfo_children():
+        if isinstance(widget, tk.OptionMenu):
+            widget.configure(bg=ACCENT_COLOR, fg=LIGHT_TEXT, font=FONT)
+            widget["menu"].configure(bg=ACCENT_COLOR, fg=LIGHT_TEXT, activebackground="#6272A4", activeforeground=LIGHT_TEXT, font=FONT)
+
+apply_dark_mode()
 
 root.mainloop()
