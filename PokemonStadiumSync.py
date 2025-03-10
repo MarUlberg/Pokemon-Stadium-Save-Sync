@@ -75,6 +75,42 @@ for gba_slot, srm_filename in gba_slots.items():
     sav_filename = srm_filename.replace(".srm", "-2.sav")
     sav_path = os.path.join(sav_dir, sav_filename)
     delete_and_replace(gba_slot, srm_path, sav_path)
+    
+# Check and restore missing .gb files
+def restore_gb_files():
+    for key, rom in n64_roms.items():
+        if not rom.strip():
+            continue
+
+        gb_file = os.path.join(sav_dir, rom + ".gb")  # Expected location
+        gb_file = os.path.normpath(gb_file).replace("\\", "/")  # Normalize path
+
+        # Determine the corresponding Game Boy ROM based on RetroarchTransferPak
+        if key == "Stadium 1":
+            gb_rom_name = gb_slots.get(RetroarchTransferPak1)
+        elif key == "Stadium 2":
+            gb_rom_name = gb_slots.get(RetroarchTransferPak2)
+        else:
+            gb_rom_name = None
+
+        if gb_rom_name:
+            gb_rom_name = gb_rom_name.replace(".srm", ".gb")  # Convert .srm to .gb
+            gbrom_path = os.path.join(gbrom_dir, gb_rom_name)  # Locate in gbrom_dir
+            gbrom_path = os.path.normpath(gbrom_path).replace("\\", "/")  # Normalize path
+
+            if not os.path.exists(gb_file):
+                print(f"Creating {rom}.gb from {gbrom_path}")
+
+                if os.path.exists(gbrom_path):
+                    try:
+                        shutil.copy2(gbrom_path, gb_file)
+                    except Exception as e:
+                        print(f"Error fetching {rom}.gb: {e}")
+                else:
+                    print(f"Error: {gbrom_path} does not exist.")
+
+# Call the function to restore missing .gb files
+restore_gb_files()
 
 if stay_open:
     input("Press Enter to close the window...")
