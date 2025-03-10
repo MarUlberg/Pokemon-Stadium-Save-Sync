@@ -3,10 +3,19 @@ from tkinter import messagebox, filedialog
 import re
 import os
 import configparser
+import sys
+import time
+
+start_time = time.time()
 
 def find_retroarch_folder():
     """Dynamically locate RetroArch base directory"""
-    script_dir = os.path.dirname(os.path.abspath(__file__))  # Get the script's directory
+    # Check if running as a compiled executable
+    if getattr(sys, 'frozen', False):
+        script_dir = os.path.dirname(sys.argv[0])  # Path of the .exe file
+    else:
+        script_dir = os.path.dirname(os.path.abspath(__file__))  # Path of the script
+
     parts = script_dir.split(os.path.sep)  # Split into folder components
     parts_lower = [part.lower() for part in parts]  # Convert all parts to lowercase
 
@@ -132,8 +141,8 @@ def save_config():
                     file.write(f"{key} = {config.get('GBASlots', key)}\n")
                 else:
                     file.write(line)  # Keep unknown lines untouched
-
-        messagebox.showinfo("Success", "Configuration saved successfully!")
+        if time.time() - start_time > 0.5:
+            messagebox.showinfo("Success", "Configuration saved successfully!")
 
     except Exception as e:
         messagebox.showerror("Error", f"Failed to save configuration: {e}")
@@ -289,5 +298,5 @@ def apply_dark_mode():
             widget["menu"].configure(bg=ACCENT_COLOR, fg=LIGHT_TEXT, activebackground="#6272A4", activeforeground=LIGHT_TEXT, font=FONT)
 
 apply_dark_mode()
-
+save_config()
 root.mainloop()
