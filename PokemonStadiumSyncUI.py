@@ -85,11 +85,19 @@ def save_config():
 
         if "GBSlots" in config:
             for game in ["Green", "Red", "Blue", "Yellow", "Gold", "Silver", "Crystal"]:
-                config.set("GBSlots", game, entries[game].get())
+                game_value = entries[game].get()
+                # Ensure .srm extension is added if not present
+                if not game_value.endswith(".srm"):
+                    game_value += ".srm"
+                config.set("GBSlots", game, game_value)
 
         if "GBASlots" in config:
             for game in ["Ruby", "Sapphire", "Emerald", "FireRed", "LeafGreen"]:
-                config.set("GBASlots", game, entries[game].get())
+                game_value = entries[game].get()
+                # Ensure .srm extension is added if not present
+                if not game_value.endswith(".srm"):
+                    game_value += ".srm"
+                config.set("GBASlots", game, game_value)
 
         # Write back using manual formatting to preserve original structure
         with open(CONFIG_FILE, "w", encoding="utf-8") as file:
@@ -129,6 +137,7 @@ def save_config():
 
     except Exception as e:
         messagebox.showerror("Error", f"Failed to save configuration: {e}")
+
 
 # Create UI
 root = tk.Tk()
