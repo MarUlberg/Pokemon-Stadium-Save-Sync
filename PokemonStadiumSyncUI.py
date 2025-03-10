@@ -32,11 +32,12 @@ CONFIG_FILE = "PokemonStadiumSync.cfg"
 def load_config():
     """Load configuration from PokemonStadiumSync.cfg"""
     config = configparser.ConfigParser()
+    config.optionxform = str  # Preserve case sensitivity
     config_data = {}
     try:
         config.read(CONFIG_FILE, encoding="utf-8")
-        config_data["RetroarchTransferPak1"] = config.get("Ports", "retroarchtransferpak1", fallback="")
-        config_data["RetroarchTransferPak2"] = config.get("Ports", "retroarchtransferpak2", fallback="")
+        config_data["RetroarchTransferPak1"] = config.get("Ports", "RetroarchTransferPak1", fallback="")
+        config_data["RetroarchTransferPak2"] = config.get("Ports", "RetroarchTransferPak2", fallback="")
         config_base_dir = config.get("Directories", "base_dir", fallback="")
         if os.path.isdir(config_base_dir):
             config_data["base_dir"] = config_base_dir
@@ -49,13 +50,15 @@ def load_config():
         config_data["sav_dir"] = config.get("Directories", "sav_subdir", fallback="")
         config_data["gbrom_dir"] = config.get("Directories", "gbrom_subdir", fallback="")
         config_data["stay_open"] = config.getboolean("General", "stay_open", fallback=False)
-        config_data["Stadium 1"] = config.get("StadiumROMs", "stadium 1", fallback="")
-        config_data["Stadium 2"] = config.get("StadiumROMs", "stadium 2", fallback="")
+        config_data["Stadium 1"] = config.get("StadiumROMs", "Stadium 1", fallback="")
+        config_data["Stadium 2"] = config.get("StadiumROMs", "Stadium 2", fallback="")
+
         for game in ["Green", "Red", "Blue", "Yellow", "Gold", "Silver", "Crystal"]:
-            raw_value = config.get("GBSlots", game.lower(), fallback="")
+            raw_value = config.get("GBSlots", game, fallback="")
             config_data[game] = os.path.splitext(raw_value)[0]
+
         for game in ["Ruby", "Sapphire", "Emerald", "FireRed", "LeafGreen"]:
-            raw_value = config.get("GBASlots", game.lower(), fallback="")
+            raw_value = config.get("GBASlots", game, fallback="")
             config_data[game] = os.path.splitext(raw_value)[0]
 
     except Exception as e:
@@ -63,13 +66,15 @@ def load_config():
 
     return config_data
 
+
 def save_config():
     """Save configuration to PokemonStadiumSync.cfg"""
     try:
         config = configparser.RawConfigParser()
+        config.optionxform = str  # Preserve case sensitivity
+        
         config.read(CONFIG_FILE, encoding="utf-8")
 
-        # Ensure sections exist before setting values
         if not config.has_section("General"):
             config.add_section("General")
         config.set("General", "stay_open", str(not stay_open_var.get()))
@@ -107,11 +112,13 @@ def save_config():
             if not game_value.endswith(".srm"):
                 game_value += ".srm"
             config.set("GBASlots", game, game_value)
+
         with open(CONFIG_FILE, "w", encoding="utf-8") as file:
             config.write(file)
-        
+
         if time.time() - start_time > 0.5:
             messagebox.showinfo("Success", "Configuration saved successfully!")
+
     except Exception as e:
         messagebox.showerror("Error", f"Failed to save configuration: {e}")
 
