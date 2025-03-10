@@ -108,9 +108,18 @@ def restore_gb_files():
                         print(f"Error fetching {rom}.gb: {e}")
                 else:
                     print(f"Error: {gbrom_path} does not exist.")
-
-# Call the function to restore missing .gb files
 restore_gb_files()
+
+# Check if Stadium 1 or Stadium 2 ROMs exist
+def check_stadium_saves():
+    for key, rom in n64_roms.items():
+        if not rom.strip():
+            continue        
+        stadium_sav_path = os.path.join(sav_dir, rom)  # Expected ROM location
+        stadium_sav_path = os.path.normpath(stadium_sav_path).replace("\\", "/")  # Normalize path
+        if not os.path.exists(stadium_sav_path):
+            print(f"Warning: {rom} does not exist!")
+check_stadium_saves()
 
 if stay_open:
     input("Press Enter to close the window...")
