@@ -66,87 +66,54 @@ def load_config():
 def save_config():
     """Save configuration to PokemonStadiumSync.cfg"""
     try:
-        # Read the existing config file to preserve structure
-        with open(CONFIG_FILE, "r", encoding="utf-8") as file:
-            lines = file.readlines()
-
-        config = configparser.RawConfigParser()  # Use RawConfigParser to avoid formatting changes
+        config = configparser.RawConfigParser()
         config.read(CONFIG_FILE, encoding="utf-8")
 
-        # Preserve original sections
-        if "General" in config:
-            config.set("General", "_stay_open", str(stay_open_var.get()))
+        # Ensure sections exist before setting values
+        if not config.has_section("General"):
+            config.add_section("General")
+        config.set("General", "stay_open", str(not stay_open_var.get()))
 
-        if "Ports" in config:
-            config.set("Ports", "RetroarchTransferPak1", entries["RetroarchTransferPak1"].get())
-            config.set("Ports", "RetroarchTransferPak2", entries["RetroarchTransferPak2"].get())
+        if not config.has_section("Ports"):
+            config.add_section("Ports")
+        config.set("Ports", "RetroarchTransferPak1", entries["RetroarchTransferPak1"].get())
+        config.set("Ports", "RetroarchTransferPak2", entries["RetroarchTransferPak2"].get())
 
-        if "Directories" in config:
-            config.set("Directories", "base_dir", entries["base_dir"].get())
-            config.set("Directories", "gb_subdir", entries["gb_dir"].get())
-            config.set("Directories", "gba_subdir", entries["gba_dir"].get())
-            config.set("Directories", "sav_subdir", entries["sav_dir"].get())
-            config.set("Directories", "gbrom_subdir", entries["gbrom_dir"].get())
+        if not config.has_section("Directories"):
+            config.add_section("Directories")
+        config.set("Directories", "base_dir", entries["base_dir"].get())
+        config.set("Directories", "gb_subdir", entries["gb_dir"].get())
+        config.set("Directories", "gba_subdir", entries["gba_dir"].get())
+        config.set("Directories", "sav_subdir", entries["sav_dir"].get())
+        config.set("Directories", "gbrom_subdir", entries["gbrom_dir"].get())
 
-        if "StadiumROMs" in config:
-            config.set("StadiumROMs", "Stadium 1", entries["Stadium 1"].get())
-            config.set("StadiumROMs", "Stadium 2", entries["Stadium 2"].get())
+        if not config.has_section("StadiumROMs"):
+            config.add_section("StadiumROMs")
+        config.set("StadiumROMs", "Stadium 1", entries["Stadium 1"].get())
+        config.set("StadiumROMs", "Stadium 2", entries["Stadium 2"].get())
 
-        if "GBSlots" in config:
-            for game in ["Green", "Red", "Blue", "Yellow", "Gold", "Silver", "Crystal"]:
-                game_value = entries[game].get()
-                # Ensure .srm extension is added if not present
-                if not game_value.endswith(".srm"):
-                    game_value += ".srm"
-                config.set("GBSlots", game, game_value)
+        if not config.has_section("GBSlots"):
+            config.add_section("GBSlots")
+        for game in ["Green", "Red", "Blue", "Yellow", "Gold", "Silver", "Crystal"]:
+            game_value = entries[game].get()
+            if not game_value.endswith(".srm"):
+                game_value += ".srm"
+            config.set("GBSlots", game, game_value)
 
-        if "GBASlots" in config:
-            for game in ["Ruby", "Sapphire", "Emerald", "FireRed", "LeafGreen"]:
-                game_value = entries[game].get()
-                # Ensure .srm extension is added if not present
-                if not game_value.endswith(".srm"):
-                    game_value += ".srm"
-                config.set("GBASlots", game, game_value)
-
-        # Write back using manual formatting to preserve original structure
+        if not config.has_section("GBASlots"):
+            config.add_section("GBASlots")
+        for game in ["Ruby", "Sapphire", "Emerald", "FireRed", "LeafGreen"]:
+            game_value = entries[game].get()
+            if not game_value.endswith(".srm"):
+                game_value += ".srm"
+            config.set("GBASlots", game, game_value)
         with open(CONFIG_FILE, "w", encoding="utf-8") as file:
-            for line in lines:
-                stripped = line.strip()
-
-                # Preserve existing comments and blank lines
-                if stripped.startswith(";") or stripped == "":
-                    file.write(line)
-                    continue
-
-                # Write sections as-is
-                if stripped.startswith("[") and stripped.endswith("]"):
-                    file.write(line)
-                    continue
-
-                # Modify only the values that were updated
-                key, sep, value = line.partition("=")
-                key = key.strip()
-
-                if config.has_option("General", key):
-                    file.write(f"{key} = {config.get('General', key)}\n")
-                elif config.has_option("Ports", key):
-                    file.write(f"{key} = {config.get('Ports', key)}\n")
-                elif config.has_option("Directories", key):
-                    file.write(f"{key} = {config.get('Directories', key)}\n")
-                elif config.has_option("StadiumROMs", key):
-                    file.write(f"{key} = {config.get('StadiumROMs', key)}\n")
-                elif config.has_option("GBSlots", key):
-                    file.write(f"{key} = {config.get('GBSlots', key)}\n")
-                elif config.has_option("GBASlots", key):
-                    file.write(f"{key} = {config.get('GBASlots', key)}\n")
-                else:
-                    file.write(line)  # Keep unknown lines untouched
+            config.write(file)
+        
         if time.time() - start_time > 0.5:
             messagebox.showinfo("Success", "Configuration saved successfully!")
-
     except Exception as e:
         messagebox.showerror("Error", f"Failed to save configuration: {e}")
-
 
 # Create UI
 root = tk.Tk()
