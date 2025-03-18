@@ -1,3 +1,5 @@
+### ==================  Import Dependencies ================== ###
+
 import configparser
 import os
 import sys
@@ -269,7 +271,146 @@ def handle_paste(event):
     widget.event_generate("<<Paste>>")
     on_entry_updated()
 
+### ==================  Format files and directories ================== ###
+def normalize_path(path):
+    """Ensures all paths use '/' for consistency"""
+    return os.path.normpath(path).replace("\\", "/")
+    
+def normalize_config_key(key):
+    """Maps config keys to UI keys."""
+    key_mapping = {
+        "gb_subdir": "gb_dir",
+        "gba_subdir": "gba_dir",
+        "sav_subdir": "sav_dir",
+        "gbrom_subdir": "gbrom_dir",
+        "firered": "FireRed",
+        "leafgreen": "LeafGreen",
+        "stay_open": "stay_open",
+        "run_minimized": "run_minimized",
+        "retroarchtransferpak1": "RetroarchTransferPak1",
+        "retroarchtransferpak2": "RetroarchTransferPak2",
+    }
+    return key_mapping.get(key, key)
 
+def trim_base_dir(base_dir, entry_keys):
+    """Trims the base directory from the given entry keys."""
+    base_dir = os.path.normpath(base_dir).rstrip("/\\")
+    for key in entry_keys:
+        current_value = entries[key].get().strip()
+        if not current_value:
+            continue
+        normalized_value = os.path.normpath(current_value).rstrip("/\\")
+        if normalized_value.lower().startswith(base_dir.lower()):
+            new_relative_path = normalized_value[len(base_dir):].lstrip("/\\")
+            new_relative_path = os.path.normpath(new_relative_path).replace("\\", "/")
+            entries[key].delete(0, tk.END)
+            entries[key].insert(0, new_relative_path)
+            print(f"🔧 Trimmed {key}: {normalized_value} -> {new_relative_path}")
+
+def trim_base_dir_from_subfolders(base_dir):
+    """Trims the base directory from subfolder paths."""
+    trim_base_dir(base_dir, ["gb_dir", "gba_dir", "sav_dir", "gbrom_dir"])
+
+def trim_base_dir_from_files(base_dir):
+    """Trims the base directory from save slots and Stadium ROMs."""
+    trim_base_dir(base_dir, ["Stadium 1", "Stadium 2", "Green", "Red", "Blue", "Yellow", "Gold", "Silver", "Crystal",
+                             "Ruby", "Sapphire", "Emerald", "FireRed", "LeafGreen"])
+
+
+
+
+### ==================  Fills in directories ================== ###
+
+def detect_and_set_base_directory():
+    """Automatically detect and set the base directory based on the script's execution path."""
+    base_dir_entry = entries["base_dir"]
+
+    # Get the directory the script or executable is running from
+    script_dir = os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__)
+
+    print(f"🔍 DEBUG: Script running from {script_dir}")
+
+    # Ensure RetroArch is in the path before accepting it
+    if "retroarch" in script_dir.lower():
+        detected_base = script_dir[:script_dir.lower().find("retroarch") + len("RetroArch")]
+        detected_base = normalize_path(detected_base)  # Normalize slashes
+
+        # Update the base directory entry
+        base_dir_entry.delete(0, tk.END)
+        base_dir_entry.insert(0, detected_base)
+        print(f"✔️ Auto-detected RetroArch base directory: {detected_base}")
+        return
+
+    print("❌ WARNING: Script is not running from a RetroArch directory. Rejecting auto-detection.")
+
+    # Predefined fallback locations if detection fails
+    possible_paths = [
+        "C:/Program Files/RetroArch",
+        "C:/Program Files (x86)/RetroArch",
+        os.path.expanduser("~/RetroArch"),
+        os.path.expanduser("~/Applications/RetroArch"),
+        "D:/RetroArch",
+        "E:/RetroArch"
+    ]
+
+    for path in possible_paths:
+        if os.path.exists(path):
+            normalized_base = normalize_path(path)  # Normalize before using
+
+            base_dir_entry.delete(0, tk.END)
+            base_dir_entry.insert(0, normalized_base)
+            print(f"✔️ Auto-detected RetroArch base directory from fallback: {normalized_base}")
+            return
+
+    print("❌ No valid RetroArch base directory found.")
+
+def auto_populate_subfolder():
+    """Automatically populates subfolder textboxes based on last_found path only if they are empty or invalid."""
+    global last_found, last_found_type
+
+    if not last_found or not last_found_type:
+        print("❌ auto_populate_subfolder: No valid path found. Skipping.")
+        return  # No valid path found
+
+    base_dir = os.path.normpath(entries["base_dir"].get().strip())  # Get base directory
+    relative_path = os.path.relpath(last_found, base_dir).replace("\\", "/")  # Trim base dir
+    subfolder_path = os.path.dirname(relative_path)  # Remove the filename
+
+    print(f"🔍 auto_populate_subfolder: last_found = {last_found}, last_found_type = {last_found_type}")
+    print(f"📁 Base Dir: {base_dir} | Relative Path: {relative_path} | Subfolder Path: {subfolder_path}")
+
+    # Debugging: Print existing UI fields
+    print("🔎 Existing UI Entries:", entries.keys())
+
+    # Function to safely update textboxes if they don't exist
+    def update_textbox_if_invalid(entry_key, value):
+        """Only update the textbox if the current path is empty or invalid."""
+        if entry_key in entries:
+            current_path = entries[entry_key].get().strip()
+            path_exists = os.path.exists(os.path.join(base_dir, current_path))  # Check if path exists
+
+            if not path_exists:  # Only update if path does not exist
+                print(f"✔️ Auto-updating {entry_key} (previously invalid) with: {value}")
+                entries[entry_key].delete(0, tk.END)
+                entries[entry_key].insert(0, value)
+                entries[entry_key].update()  # Force UI refresh
+            else:
+                print(f"⚠️ Skipping {entry_key} - Path exists: {current_path}")
+        else:
+            print(f"❌ Error: {entry_key} not found in entries.")
+
+    # Determine which subfolder should be updated
+    if last_found_type == "gb_slot":
+        update_textbox_if_invalid("gb_dir", subfolder_path)
+
+    elif last_found_type == "gba_slot":
+        update_textbox_if_invalid("gba_dir", subfolder_path)
+
+    elif last_found_type == "stadium_rom":
+        update_textbox_if_invalid("sav_dir", subfolder_path)
+
+    # Ensure UI reflects the updates
+    update_status_icons()
 
 
 
@@ -420,6 +561,7 @@ def load_or_create_config():
                 print(f"⚠️ WARNING: UI Entry Not Found for Key '{normalized_key}'")
 
     print("=== DEBUG: UI Update Completed ===")
+    detect_and_set_base_directory()
     return config
 
 
@@ -437,143 +579,10 @@ def write_default_config(config):
 
 
 
-
-### ==================  Fills in directories ================== ###
-
-def detect_and_set_base_directory(full_path):
-    """Detects if the selected path contains a RetroArch folder and updates the base directory if needed."""
-    base_dir_entry = entries["base_dir"]
-
-    # If base_dir is already valid, skip this process
-    if os.path.exists(base_dir_entry.get().strip()):
-        return
-
-    # Normalize the full path
-    full_path = os.path.normpath(full_path)
-
-    # Split the path and check for "retroarch" (case-insensitive)
-    path_parts = full_path.lower().split(os.path.sep)
-    if "retroarch" in path_parts:
-        retroarch_index = path_parts.index("retroarch")
-        detected_base = os.path.sep.join(full_path.split(os.path.sep)[:retroarch_index + 1])
-
-        # Normalize detected_base to ensure consistency
-        detected_base = os.path.normpath(detected_base)
-
-        # Convert to forward slashes for UI consistency
-        detected_base = detected_base.replace("\\", "/")
-
-        # Update the base directory field
-        print(f"✔️ Auto-detected RetroArch base directory: {detected_base}")  # Debugging
-        base_dir_entry.delete(0, tk.END)
-        base_dir_entry.insert(0, detected_base)
-
-        # ✔️ Trim paths retroactively
-        trim_base_dir_from_subfolders(detected_base)
-        trim_base_dir_from_files(detected_base)
-
-        # Re-run entry validation
-        update_status_icons()
-
-def auto_populate_subfolder():
-    """Automatically populates subfolder textboxes based on last_found path only if they are empty or invalid."""
-    global last_found, last_found_type
-
-    if not last_found or not last_found_type:
-        print("❌ auto_populate_subfolder: No valid path found. Skipping.")
-        return  # No valid path found
-
-    base_dir = os.path.normpath(entries["base_dir"].get().strip())  # Get base directory
-    relative_path = os.path.relpath(last_found, base_dir).replace("\\", "/")  # Trim base dir
-    subfolder_path = os.path.dirname(relative_path)  # Remove the filename
-
-    print(f"🔍 auto_populate_subfolder: last_found = {last_found}, last_found_type = {last_found_type}")
-    print(f"📁 Base Dir: {base_dir} | Relative Path: {relative_path} | Subfolder Path: {subfolder_path}")
-
-    # Debugging: Print existing UI fields
-    print("🔎 Existing UI Entries:", entries.keys())
-
-    # Function to safely update textboxes if they don't exist
-    def update_textbox_if_invalid(entry_key, value):
-        """Only update the textbox if the current path is empty or invalid."""
-        if entry_key in entries:
-            current_path = entries[entry_key].get().strip()
-            path_exists = os.path.exists(os.path.join(base_dir, current_path))  # Check if path exists
-
-            if not path_exists:  # Only update if path does not exist
-                print(f"✔️ Auto-updating {entry_key} (previously invalid) with: {value}")
-                entries[entry_key].delete(0, tk.END)
-                entries[entry_key].insert(0, value)
-                entries[entry_key].update()  # Force UI refresh
-            else:
-                print(f"⚠️ Skipping {entry_key} - Path exists: {current_path}")
-        else:
-            print(f"❌ Error: {entry_key} not found in entries.")
-
-    # Determine which subfolder should be updated
-    if last_found_type == "gb_slot":
-        update_textbox_if_invalid("gb_dir", subfolder_path)
-
-    elif last_found_type == "gba_slot":
-        update_textbox_if_invalid("gba_dir", subfolder_path)
-
-    elif last_found_type == "stadium_rom":
-        update_textbox_if_invalid("sav_dir", subfolder_path)
-
-    # Ensure UI reflects the updates
-    update_status_icons()
-
-### ==================  Format files and directories ================== ###
-def normalize_path(path):
-    """Ensures all paths use '/' for consistency"""
-    return os.path.normpath(path).replace("\\", "/")
-    
-def normalize_config_key(key):
-    """Maps config keys to UI keys."""
-    key_mapping = {
-        "gb_subdir": "gb_dir",
-        "gba_subdir": "gba_dir",
-        "sav_subdir": "sav_dir",
-        "gbrom_subdir": "gbrom_dir",
-        "firered": "FireRed",
-        "leafgreen": "LeafGreen",
-        "stay_open": "stay_open",
-        "run_minimized": "run_minimized",
-        "retroarchtransferpak1": "RetroarchTransferPak1",
-        "retroarchtransferpak2": "RetroarchTransferPak2",
-    }
-    return key_mapping.get(key, key)
-
-def trim_base_dir(base_dir, entry_keys):
-    """Trims the base directory from the given entry keys."""
-    base_dir = os.path.normpath(base_dir).rstrip("/\\")
-    for key in entry_keys:
-        current_value = entries[key].get().strip()
-        if not current_value:
-            continue
-        normalized_value = os.path.normpath(current_value).rstrip("/\\")
-        if normalized_value.lower().startswith(base_dir.lower()):
-            new_relative_path = normalized_value[len(base_dir):].lstrip("/\\")
-            new_relative_path = os.path.normpath(new_relative_path).replace("\\", "/")
-            entries[key].delete(0, tk.END)
-            entries[key].insert(0, new_relative_path)
-            print(f"🔧 Trimmed {key}: {normalized_value} -> {new_relative_path}")
-
-def trim_base_dir_from_subfolders(base_dir):
-    """Trims the base directory from subfolder paths."""
-    trim_base_dir(base_dir, ["gb_dir", "gba_dir", "sav_dir", "gbrom_dir"])
-
-def trim_base_dir_from_files(base_dir):
-    """Trims the base directory from save slots and Stadium ROMs."""
-    trim_base_dir(base_dir, ["Stadium 1", "Stadium 2", "Green", "Red", "Blue", "Yellow", "Gold", "Silver", "Crystal",
-                             "Ruby", "Sapphire", "Emerald", "FireRed", "LeafGreen"])
-
-
-
-
 ### ==================  Create UI ================== ###
 root = tk.Tk()
 root.title("Pokemon Stadium Sync Configuration")
+root.columnconfigure(2, weight=1)  # Make column 2 expand when resizing
 
 def apply_dark_mode():
     """Apply custom dark mode styling to the UI"""
@@ -753,7 +762,7 @@ for idx, (key, text) in enumerate(labels.items(), start=1):
                          bg="#424242", fg="white", insertbackground="white",
                          relief="flat", highlightthickness=1, 
                          highlightbackground="#555", highlightcolor="#777")
-        entry.grid(row=idx, column=2, padx=3, pady=4, ipady=1)  # ✔️ Column moved to 2
+        entry.grid(row=idx, column=2, padx=3, pady=4, ipady=1, sticky="ew")  # ✔️ Column moved to 2
         entries[key] = entry
 
         # Create browse buttons
@@ -779,9 +788,9 @@ for idx, (key, text) in enumerate(labels.items(), start=1):
 ### ===  Search Button === ###
 search_button = tk.Button(
     root,
-    text="Search for files",
+    text="⭯",
     font=("Segoe UI", 10),  # Match browse buttons
-    width=18,  # Match browse button width
+    width=9,  # Match browse button width
     bd=0,  # No border
     relief="flat",
     bg="#424242",  # Same as textboxes
@@ -791,32 +800,14 @@ search_button = tk.Button(
 )
 search_button.bind("<Enter>", lambda e: e.widget.configure(bg="#666"))
 search_button.bind("<Leave>", lambda e: e.widget.configure(bg="#424242"))
-search_button.grid(row=len(labels) + 1, column=0, columnspan=2, padx=15, pady=15, sticky="w")
-
-# Checkbox for "Stay Open"
-stay_open_var = tk.BooleanVar()
-entries["stay_open"] = stay_open_var  
-stay_open_checkbox = tk.Checkbutton(
-    root,
-    text="Close terminal after sync",
-    variable=stay_open_var,
-    bg="#212121", fg="white",
-    selectcolor="#212121",  
-    font=("Segoe UI", 10),
-    activebackground="#212121",
-    activeforeground="white",
-    relief="flat",
-    border=20,
-    highlightbackground="#212121",
-)
-stay_open_checkbox.grid(row=len(labels) + 1, column=1, columnspan=2, padx=0, pady=0, sticky="w")
+search_button.grid(row=1 + 1, column=3, columnspan=1, padx=5, pady=5, sticky="s")
 
 # Checkbox for "Run minimized"
 run_minimized_var = tk.BooleanVar()
 entries["run_minimized"] = run_minimized_var
 run_minimized_checkbox = tk.Checkbutton(
     root,
-    text="Run in the background",
+    text="Start minimized",
     variable=run_minimized_var,
     bg="#212121", fg="white",
     selectcolor="#212121",  
@@ -827,7 +818,25 @@ run_minimized_checkbox = tk.Checkbutton(
     border=20,
     highlightbackground="#212121",
 )
-run_minimized_checkbox.grid(row=len(labels) + 1, column=1, columnspan=2, padx=70, pady=0, sticky="e")
+run_minimized_checkbox.grid(row=len(labels) + 1, column=0, columnspan=3, padx=8, pady=0, sticky="w")
+
+# Checkbox for "Stay Open"
+stay_open_var = tk.BooleanVar()
+entries["stay_open"] = stay_open_var  
+stay_open_checkbox = tk.Checkbutton(
+    root,
+    text="Close after synchronization",
+    variable=stay_open_var,
+    bg="#212121", fg="white",
+    selectcolor="#212121",  
+    font=("Segoe UI", 10),
+    activebackground="#212121",
+    activeforeground="white",
+    relief="flat",
+    border=20,
+    highlightbackground="#212121",
+)
+stay_open_checkbox.grid(row=len(labels) + 1, column=2, columnspan=1, padx=0, pady=0, sticky="w")
 
 ### ===  Save Button === ###
 save_button = tk.Button(
