@@ -315,6 +315,19 @@ def prepare_transferpak_roms():
         else:
             print(f"[WARNING] No GB ROM found for {format_game_name(pak_slot)} in gbrom_dir.")
 
+def try_copy(src, dst, retries=3, delay=0.5):
+    """Attempts to copy a file with retry support for PermissionError."""
+    for attempt in range(retries):
+        try:
+            shutil.copy2(src, dst)
+            return True
+        except PermissionError as e:
+            if attempt < retries - 1:
+                time.sleep(delay)
+            else:
+                print(f"[ERROR] Could not copy {src} → {dst}: {e}")
+                return False
+
 def sync_files(slot, srm, sav, monitoring=False):
     color = slot_colors.get(slot.lower(), Fore.WHITE)
     formatted_slot = f"{color}{format_game_name(slot)}{Fore.RESET}"
@@ -349,13 +362,13 @@ def sync_files(slot, srm, sav, monitoring=False):
 
     if srm_time > sav_time:
         print(f"{timestamp}{formatted_slot}: {action_color}The .sav is outdated. Replacing it with .srm{Fore.LIGHTBLACK_EX} - {Fore.YELLOW}SRM → SAV{Fore.LIGHTBLACK_EX} - {Fore.RESET}{formatted_cart}{transferpak_suffix}")
-        shutil.copy2(srm, sav)
-        os.utime(sav, (srm_time, srm_time))
+        if try_copy(srm, sav):
+            os.utime(sav, (get_last_modified_time(srm), get_last_modified_time(srm)))
+
     else:
         print(f"{timestamp}{formatted_slot}: {action_color}The .srm is outdated. Replacing it with .sav{Fore.LIGHTBLACK_EX} - {Fore.YELLOW}SRM ← SAV{Fore.LIGHTBLACK_EX} - {Fore.RESET}{formatted_cart}{transferpak_suffix}")
-        shutil.copy2(sav, srm)
-        os.utime(srm, (sav_time, sav_time))
-
+        if try_copy(sav, srm):
+            os.utime(srm, (get_last_modified_time(sav), get_last_modified_time(sav)))
 
 # Sync GB slots
 for game_name, srm_filename in gb_slots.items():
