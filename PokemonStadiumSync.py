@@ -167,8 +167,8 @@ if sys.platform == "win32":
             print(f"Error starting system tray: {e}")
 
 # Read Ports
-retroarch_transferpak1 = config.get('Ports', 'retroarchtransferpak1', fallback='').strip()
-retroarch_transferpak2 = config.get('Ports', 'retroarchtransferpak2', fallback='').strip()
+retroarch_transferpak1 = config.get('Ports', 'RetroarchTransferPak1', fallback='').strip()
+retroarch_transferpak2 = config.get('Ports', 'RetroarchTransferPak2', fallback='').strip()
 
 # Read Directories & Normalize Paths
 try:
@@ -334,9 +334,11 @@ for game_name, srm_filename in gb_slots.items():
     formatted_game_name = format_game_name(game_name)
 
     if game_name.lower() == retroarch_transferpak1.lower():
-        sav_filename = f"{n64_roms.get('stadium 1', '')}.sav"
+        rom = n64_roms.get("stadium 1", "").strip()
+        sav_filename = f"{rom}.sav" if rom else f"TransferPak1_{format_game_name(game_name)}.sav"
     elif game_name.lower() == retroarch_transferpak2.lower():
-        sav_filename = f"{n64_roms.get('stadium 2', '')}.sav"
+        rom = n64_roms.get("stadium 2", "").strip()
+        sav_filename = f"{rom}.sav" if rom else f"TransferPak2_{format_game_name(game_name)}.sav"
     else:
         sav_filename = f"PkmnTransferPak{slot_number} {formatted_game_name}.sav"
 
@@ -422,9 +424,9 @@ class SaveFileEventHandler(FileSystemEventHandler):
             sav_filename = f"PkmnTransferPak{slot_number} {formatted_game_name}.sav"
 
             if game_name == retroarch_transferpak1.lower():
-                sav_filename = f"{n64_roms.get('stadium 1', '')}.sav"
+                sav_filename = f"{n64_roms.get('Stadium 1', '')}.sav"
             elif game_name == retroarch_transferpak2.lower():
-                sav_filename = f"{n64_roms.get('stadium 2', '')}.sav"
+                sav_filename = f"{n64_roms.get('Stadium 2', '')}.sav"
 
             sav_path = os.path.normcase(os.path.abspath(os.path.join(sav_dir, sav_filename)))
 
@@ -487,9 +489,9 @@ def periodic_sync_check(interval=120):
             sav_filename = f"PkmnTransferPak{slot_number} {formatted_game_name}.sav"
 
             if game_name == retroarch_transferpak1.lower():
-                sav_filename = f"{n64_roms.get('stadium 1', '')}.sav"
+                sav_filename = f"{n64_roms.get('Stadium 1', '')}.sav"
             elif game_name == retroarch_transferpak2.lower():
-                sav_filename = f"{n64_roms.get('stadium 2', '')}.sav"
+                sav_filename = f"{n64_roms.get('Stadium 2', '')}.sav"
 
             sav_path = os.path.abspath(os.path.join(sav_dir, sav_filename))
 
