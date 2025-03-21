@@ -418,6 +418,7 @@ def auto_populate_subfolder():
 def save_configuration():
     """Saves the current UI values into PokemonStadiumSync.cfg"""
     config = configparser.ConfigParser()
+    config.optionxform = str
 
     # Ensure all sections exist
     for section in DEFAULT_CONFIG:
@@ -475,6 +476,7 @@ def save_configuration():
 def load_or_create_config():
     """Ensures the config file exists, creates missing values, and populates the UI properly."""
     config = configparser.ConfigParser()
+    config.optionxform = str
 
     # ✔️ If config file does not exist, create it first
     if not os.path.exists(CONFIG_FILE):

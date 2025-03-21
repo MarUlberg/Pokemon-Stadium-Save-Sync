@@ -19,6 +19,165 @@ from pystray import MenuItem as item, Icon
 from PIL import Image  # Used for tray icon handling
 from colorama import init, Fore  # Colored terminal output
 
+### ==================  Global Variables & Initialization ================== ###
+
+# Initialize Colorama for colored terminal output
+init(autoreset=True)
+
+# Windows-Specific Console Handling
+whnd = None
+if sys.platform == "win32":
+    whnd = ctypes.windll.kernel32.GetConsoleWindow()
+
+# Tracking Sync Status
+last_sync_time = {}      # Tracks last synchronization timestamps
+file_last_checked = {}   # Tracks when files were last checked
+file_last_modified = {}  # Tracks last modified timestamps
+file_last_synced = {}    # Tracks when files were last successfully synced
+
+### ==================  System Tray Functions ================== ###
+
+def hide_terminal():
+    """Hides the console window (Windows only)."""
+    global whnd
+    if sys.platform == "win32" and whnd:
+        ctypes.windll.user32.ShowWindow(whnd, 0)
+
+def show_terminal(icon, item):
+    """Restores the console window (Windows only)."""
+    global whnd
+    if sys.platform == "win32" and whnd:
+        ctypes.windll.user32.ShowWindow(whnd, 1)
+
+def exit_program(icon, item):
+    """Stops the system tray icon and exits the program."""
+    icon.stop()
+    sys.exit()
+
+def check_minimize():
+    """Continuously monitors the window state and hides it when minimized."""
+    global whnd
+    while True:
+        time.sleep(1)
+        if sys.platform == "win32" and whnd:
+            if ctypes.windll.user32.IsIconic(whnd):  # If the window is minimized
+                hide_terminal()
+
+def setup_tray():
+    """Creates and runs the system tray icon, allowing manual minimization."""
+    try:
+        image = Image.open("PokemonStadiumSync.ico")  # Ensure correct icon path
+    except Exception as e:
+        print(f"Error loading tray icon: {e}")
+        return  # Don't exit the script if the icon fails to load
+
+    menu = (item('Open Console', show_terminal), item('Exit', exit_program))
+    tray_icon = Icon("PokemonStadiumSync", image, menu=menu)
+
+    # Start monitoring for manual minimization
+    threading.Thread(target=check_minimize, daemon=True).start()
+
+    tray_icon.run()
+    
+
+### ==================  Configuration Handling ================== ###
+
+# Initialize Config Parser
+config = configparser.ConfigParser()
+config.optionxform = str  # Preserve case sensitivity of keys
+
+CONFIG_FILE = "PokemonStadiumSync.cfg"
+
+DEFAULT_CONFIG = {
+    "General": {"stay_open": "True", "run_minimized": "False"},
+    "Ports": {
+        "RetroarchTransferPak1": "",  # TransferPak Port1 - For Pokemon Stadium
+        "RetroarchTransferPak2": ""   # TransferPak Port2 - For Pokemon Stadium 2
+    },
+    "Directories": {
+        "base_dir": "C:/Program Files (x86)/RetroArch",  # Base Directory
+        "gb_dir": "saves/Nintendo - Game Boy",  # Subfolder for GB saves
+        "gba_dir": "saves/Nintendo - Game Boy Advance",  # Subfolder for GBA saves
+        "sav_dir": "saves/TransferPak",  # Subfolder for TransferPak
+        "gbrom_dir": "games/Nintendo - Game Boy"  # Subfolder for GB ROMs
+    },
+    "StadiumROMs": {
+        "Stadium 1": "Pokemon Stadium (USA).n64",  # N64 ROM - Pokemon Stadium ROM (.n64/.z64)
+        "Stadium 2": "Pokemon Stadium 2 (USA).n64"  # N64 ROM - Pokemon Stadium 2 ROM (.n64/.z64)
+    },
+    "GBSlots": {
+        "Green": "Pokemon - Green Version",  # GB Slot1 - Pokemon - Green Version (.srm)
+        "Red": "Pokemon - Red Version (USA, Europe) (SGB Enhanced)",  # GB Slot2 - Pokemon - Red Version (.srm)
+        "Blue": "Pokemon - Blue Version (USA, Europe) (SGB Enhanced)",  # GB Slot3 - Pokemon - Blue Version (.srm)
+        "Yellow": "Pokemon - Yellow Version - Special Pikachu Edition (Pokemon Playable Yellow) (v1.0) (alt)",  # GB Slot4 - Pokemon - Yellow Version (.srm)
+        "Gold": "Pokemon - Gold Version (USA, Europe) (SGB Enhanced) (GB Compatible)",  # GB Slot5 - Pokemon - Gold Version (.srm)
+        "Silver": "Pokemon - Silver Version (USA, Europe) (SGB Enhanced) (GB Compatible)",  # GB Slot6 - Pokemon - Silver Version (.srm)
+        "Crystal": "Pokemon - Crystal Version (USA, Europe) (Rev 1)"  # GB Slot7 - Pokemon - Crystal Version (.srm)
+    },
+    "GBASlots": {
+        "Ruby": "Pokemon - Ruby Version (USA, Europe) (Rev 2)",  # GBA Slot1 - Pokemon - Ruby Version (.srm)
+        "Sapphire": "Pokemon - Sapphire Version (USA, Europe) (Rev 2)",  # GBA Slot2 - Pokemon - Sapphire Version (.srm)
+        "Emerald": "Pokemon - Emerald Version (USA, Europe)",  # GBA Slot3 - Pokemon - Emerald Version (.srm)
+        "FireRed": "Pokemon - FireRed Version (USA, Europe)",  # GBA Slot4 - Pokemon - FireRed Version (.srm)
+        "LeafGreen": "Pokemon - LeafGreen Version (USA, Europe)"  # GBA Slot5 - Pokemon - LeafGreen Version (.srm)
+    }
+}
+
+def load_config():
+    """Loads configuration from file. Exits if file is missing or incomplete."""
+    if not os.path.exists(CONFIG_FILE):
+        print(f"\n{Fore.RED}[ERROR]{Fore.RESET} Config file '{CONFIG_FILE}' not found.")
+        input("-> Please run the configuration tool (UI) to set it up before using this sync script.")
+        sys.exit(1)
+
+    config.read(CONFIG_FILE)
+
+    # Warn if any section or key is missing
+    for section, keys in DEFAULT_CONFIG.items():
+        if not config.has_section(section):
+            input(f"{Fore.RED}[ERROR]{Fore.RESET} Missing section in config: [{section}]")
+            sys.exit(1)
+        for key in keys:
+            if key not in config[section]:
+                input(f"{Fore.RED}[ERROR]{Fore.RESET} Missing config key: [{section}] {key}")
+                sys.exit(1)
+
+
+# Load Configuration
+load_config()
+
+# Read General Settings
+stay_open = config.getboolean('General', 'stay_open', fallback=True)
+run_minimized = config.getboolean('General', 'run_minimized', fallback=False)
+
+# Hide terminal immediately if run_minimized is True
+if run_minimized and sys.platform == "win32" and whnd:
+    ctypes.windll.user32.ShowWindow(whnd, 0)
+
+# Handle console minimization
+if sys.platform == "win32":
+    if whnd:
+        try:
+            tray_thread = threading.Thread(target=setup_tray, daemon=True)
+            tray_thread.start()
+        except Exception as e:
+            print(f"Error starting system tray: {e}")
+
+# Read Ports
+retroarch_transferpak1 = config.get('Ports', 'retroarchtransferpak1', fallback='').strip()
+retroarch_transferpak2 = config.get('Ports', 'retroarchtransferpak2', fallback='').strip()
+
+# Read Directories & Normalize Paths
+try:
+    base_dir = os.path.normpath(config.get('Directories', 'base_dir'))
+    gb_dir = os.path.join(base_dir, os.path.normpath(config.get('Directories', 'gb_dir')))
+    gba_dir = os.path.join(base_dir, os.path.normpath(config.get('Directories', 'gba_dir')))
+    sav_dir = os.path.join(base_dir, os.path.normpath(config.get('Directories', 'sav_dir')))
+    gbrom_dir = os.path.join(base_dir, os.path.normpath(config.get('Directories', 'gbrom_dir')))
+except configparser.NoOptionError as e:
+    input(f"Error reading directories from config: {e}")
+    sys.exit(1)
+
 
 ### ==================  Kill Running Instances ================== ###
 
@@ -73,163 +232,6 @@ def kill_previous_instances():
 # Execute cleanup
 kill_previous_instances()
 
-
-### ==================  Global Variables & Initialization ================== ###
-
-# Initialize Colorama for colored terminal output
-init(autoreset=True)
-
-# Windows-Specific Console Handling
-whnd = None
-if sys.platform == "win32":
-    whnd = ctypes.windll.kernel32.GetConsoleWindow()
-
-# Tracking Sync Status
-last_sync_time = {}      # Tracks last synchronization timestamps
-file_last_checked = {}   # Tracks when files were last checked
-file_last_modified = {}  # Tracks last modified timestamps
-file_last_synced = {}    # Tracks when files were last successfully synced
-
-
-### ==================  System Tray Functions ================== ###
-
-def hide_terminal():
-    """Hides the console window (Windows only)."""
-    global whnd
-    if sys.platform == "win32" and whnd:
-        ctypes.windll.user32.ShowWindow(whnd, 0)
-
-def show_terminal(icon, item):
-    """Restores the console window (Windows only)."""
-    global whnd
-    if sys.platform == "win32" and whnd:
-        ctypes.windll.user32.ShowWindow(whnd, 1)
-
-def exit_program(icon, item):
-    """Stops the system tray icon and exits the program."""
-    icon.stop()
-    sys.exit()
-
-def check_minimize():
-    """Continuously monitors the window state and hides it when minimized."""
-    global whnd
-    while True:
-        time.sleep(1)
-        if sys.platform == "win32" and whnd:
-            if ctypes.windll.user32.IsIconic(whnd):  # If the window is minimized
-                hide_terminal()
-
-def setup_tray():
-    """Creates and runs the system tray icon, allowing manual minimization."""
-    try:
-        image = Image.open("PokemonStadiumSync.ico")  # Ensure correct icon path
-    except Exception as e:
-        print(f"Error loading tray icon: {e}")
-        return  # Don't exit the script if the icon fails to load
-
-    menu = (item('Open Console', show_terminal), item('Exit', exit_program))
-    tray_icon = Icon("PokemonStadiumSync", image, menu=menu)
-
-    # Start monitoring for manual minimization
-    threading.Thread(target=check_minimize, daemon=True).start()
-
-    tray_icon.run()
-
-
-
-### ==================  Configuration Handling ================== ###
-
-# Initialize Config Parser
-config = configparser.ConfigParser()
-config.optionxform = str  # Preserve case sensitivity of keys
-
-CONFIG_FILE = "PokemonStadiumSync.cfg"
-
-DEFAULT_CONFIG = {
-    "General": {"stay_open": "True", "run_minimized": "False"},
-    "Ports": {
-        "RetroarchTransferPak1": "",  # TransferPak Port1 - For Pokemon Stadium
-        "RetroarchTransferPak2": ""   # TransferPak Port2 - For Pokemon Stadium 2
-    },
-    "Directories": {
-        "base_dir": "C:/Program Files (x86)/RetroArch",  # Base Directory
-        "gb_dir": "saves/Nintendo - Game Boy",  # Subfolder for GB saves
-        "gba_dir": "saves/Nintendo - Game Boy Advance",  # Subfolder for GBA saves
-        "sav_dir": "saves/TransferPak",  # Subfolder for TransferPak
-        "gbrom_dir": "games/Nintendo - Game Boy"  # Subfolder for GB ROMs
-    },
-    "StadiumROMs": {
-        "Stadium 1": "Pokemon Stadium (USA).n64",  # N64 ROM - Pokemon Stadium ROM (.n64/.z64)
-        "Stadium 2": "Pokemon Stadium 2 (USA).n64"  # N64 ROM - Pokemon Stadium 2 ROM (.n64/.z64)
-    },
-    "GBSlots": {
-        "Green": "Pokemon - Green Version",  # GB Slot1 - Pokemon - Green Version (.srm)
-        "Red": "Pokemon - Red Version (USA, Europe) (SGB Enhanced)",  # GB Slot2 - Pokemon - Red Version (.srm)
-        "Blue": "Pokemon - Blue Version (USA, Europe) (SGB Enhanced)",  # GB Slot3 - Pokemon - Blue Version (.srm)
-        "Yellow": "Pokemon - Yellow Version - Special Pikachu Edition (Pokemon Playable Yellow) (v1.0) (alt)",  # GB Slot4 - Pokemon - Yellow Version (.srm)
-        "Gold": "Pokemon - Gold Version (USA, Europe) (SGB Enhanced) (GB Compatible)",  # GB Slot5 - Pokemon - Gold Version (.srm)
-        "Silver": "Pokemon - Silver Version (USA, Europe) (SGB Enhanced) (GB Compatible)",  # GB Slot6 - Pokemon - Silver Version (.srm)
-        "Crystal": "Pokemon - Crystal Version (USA, Europe) (Rev 1)"  # GB Slot7 - Pokemon - Crystal Version (.srm)
-    },
-    "GBASlots": {
-        "Ruby": "Pokemon - Ruby Version (USA, Europe) (Rev 2)",  # GBA Slot1 - Pokemon - Ruby Version (.srm)
-        "Sapphire": "Pokemon - Sapphire Version (USA, Europe) (Rev 2)",  # GBA Slot2 - Pokemon - Sapphire Version (.srm)
-        "Emerald": "Pokemon - Emerald Version (USA, Europe)",  # GBA Slot3 - Pokemon - Emerald Version (.srm)
-        "FireRed": "Pokemon - FireRed Version (USA, Europe)",  # GBA Slot4 - Pokemon - FireRed Version (.srm)
-        "LeafGreen": "Pokemon - LeafGreen Version (USA, Europe)"  # GBA Slot5 - Pokemon - LeafGreen Version (.srm)
-    }
-}
-
-def load_config():
-    """Loads configuration from file, ensuring it exists."""
-    if not os.path.exists(CONFIG_FILE):
-        print(f"Error: Configuration file '{CONFIG_FILE}' not found! Creating a default config...")
-        write_default_config()
-
-    config.read(CONFIG_FILE)
-
-def write_default_config(config):
-    """Writes the default configuration to a new file."""
-    for section, keys in DEFAULT_CONFIG.items():
-        config[section] = keys
-
-    with open(CONFIG_FILE, "w") as configfile:
-        config.write(configfile)
-
-    print("✔️ Default config created successfully!")
-
-# Load Configuration
-load_config()
-
-# Read General Settings
-stay_open = config.getboolean('General', 'stay_open', fallback=True)
-run_minimized = config.getboolean('General', 'run_minimized', fallback=False)
-# Handle console minimization
-if sys.platform == "win32":
-    if whnd:
-        try:
-            tray_thread = threading.Thread(target=setup_tray, daemon=True)
-            tray_thread.start()
-        except Exception as e:
-            print(f"Error starting system tray: {e}")
-
-# Read Ports
-retroarch_transferpak1 = config.get('Ports', 'retroarchtransferpak1', fallback='').strip()
-retroarch_transferpak2 = config.get('Ports', 'retroarchtransferpak2', fallback='').strip()
-
-# Read Directories & Normalize Paths
-try:
-    base_dir = os.path.normpath(config.get('Directories', 'base_dir'))
-    gb_dir = os.path.join(base_dir, os.path.normpath(config.get('Directories', 'gb_dir')))
-    gba_dir = os.path.join(base_dir, os.path.normpath(config.get('Directories', 'gba_dir')))
-    sav_dir = os.path.join(base_dir, os.path.normpath(config.get('Directories', 'sav_dir')))
-    gbrom_dir = os.path.join(base_dir, os.path.normpath(config.get('Directories', 'gbrom_dir')))
-except configparser.NoOptionError as e:
-    print(f"Error reading directories from config: {e}")
-    sys.exit(1)
-
-
-
 ### ==================  Game Slots & Save File Management ================== ###
 
 # Read Stadium ROMs & Game Slots from Config
@@ -267,10 +269,6 @@ slot_colors = {
 }
 
 
-import os
-import shutil
-from colorama import Fore
-
 ### ================== Save Synchronization ================== ###
 
 def get_last_modified_time(file_path):
@@ -294,12 +292,17 @@ def sync_files(slot, srm, sav, monitoring=False):
     srm_exists = os.path.exists(srm)
     sav_exists = os.path.exists(sav)
 
+    if monitoring:
+        timestamp = time.strftime("[%H:%M] ")
+    else:
+        timestamp = ""
+
     if not srm_exists:
-        print(f"{formatted_slot}: {Fore.LIGHTBLACK_EX}.srm file does not exist. Sync aborted.{Fore.RESET}")
+        print(f"{timestamp}{formatted_slot}: {Fore.LIGHTBLACK_EX}.srm file does not exist. Sync aborted.{Fore.RESET}")
         return
 
     if not sav_exists:
-        print(f"{formatted_slot}: {Fore.LIGHTGREEN_EX}No .sav file found. Creating from .srm{Fore.LIGHTBLACK_EX} - {Fore.YELLOW}SRM → SAV{Fore.LIGHTBLACK_EX} - {Fore.RESET}{formatted_cart}{transferpak_suffix}")
+        print(f"{timestamp}{formatted_slot}: {Fore.LIGHTGREEN_EX}No .sav file found. Creating from .srm{Fore.LIGHTBLACK_EX} - {Fore.YELLOW}SRM → SAV{Fore.LIGHTBLACK_EX} - {Fore.RESET}{formatted_cart}{transferpak_suffix}")
         shutil.copy2(srm, sav)
         os.utime(sav, (get_last_modified_time(srm), get_last_modified_time(srm)))
         return
@@ -307,17 +310,17 @@ def sync_files(slot, srm, sav, monitoring=False):
     srm_time, sav_time = get_last_modified_time(srm), get_last_modified_time(sav)
 
     if srm_time == sav_time:
-        print(f"{formatted_slot}: Saves are already synced{Fore.LIGHTBLACK_EX} - {Fore.RESET}SRM ↔ SAV{Fore.LIGHTBLACK_EX} - {Fore.RESET}{formatted_cart}{transferpak_suffix}")
+        print(f"{timestamp}{formatted_slot}: Saves are already synced{Fore.LIGHTBLACK_EX} - {Fore.RESET}SRM ↔ SAV{Fore.LIGHTBLACK_EX} - {Fore.RESET}{formatted_cart}{transferpak_suffix}")
         return
 
     action_color = Fore.CYAN if monitoring else Fore.LIGHTGREEN_EX
 
     if srm_time > sav_time:
-        print(f"{formatted_slot}: {action_color}The .sav is outdated. Replacing it with .srm{Fore.LIGHTBLACK_EX} - {Fore.YELLOW}SRM → SAV{Fore.LIGHTBLACK_EX} - {Fore.RESET}{formatted_cart}{transferpak_suffix}")
+        print(f"{timestamp}{formatted_slot}: {action_color}The .sav is outdated. Replacing it with .srm{Fore.LIGHTBLACK_EX} - {Fore.YELLOW}SRM → SAV{Fore.LIGHTBLACK_EX} - {Fore.RESET}{formatted_cart}{transferpak_suffix}")
         shutil.copy2(srm, sav)
         os.utime(sav, (srm_time, srm_time))
     else:
-        print(f"{formatted_slot}: {action_color}The .srm is outdated. Replacing it with .sav{Fore.LIGHTBLACK_EX} - {Fore.YELLOW}SRM ← SAV{Fore.LIGHTBLACK_EX} - {Fore.RESET}{formatted_cart}{transferpak_suffix}")
+        print(f"{timestamp}{formatted_slot}: {action_color}The .srm is outdated. Replacing it with .sav{Fore.LIGHTBLACK_EX} - {Fore.YELLOW}SRM ← SAV{Fore.LIGHTBLACK_EX} - {Fore.RESET}{formatted_cart}{transferpak_suffix}")
         shutil.copy2(sav, srm)
         os.utime(srm, (sav_time, sav_time))
 
@@ -446,9 +449,20 @@ observer = Observer()
 save_event_handler = SaveFileEventHandler()
 
 # Schedule observers ONLY on directories containing save files
-observer.schedule(save_event_handler, path=gb_dir, recursive=False)
-observer.schedule(save_event_handler, path=gba_dir, recursive=False)
-observer.schedule(save_event_handler, path=sav_dir, recursive=False)
+for name, path in [
+    ("GB Save Directory", gb_dir),
+    ("GBA Save Directory", gba_dir),
+    ("TransferPak Save Directory", sav_dir)
+]:
+    try:
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"{Fore.RED}[ERROR]{Fore.RESET} '{path}' does not exist.")
+        observer.schedule(save_event_handler, path=path, recursive=False)
+    except Exception as e:
+        print(f"\n{Fore.RED}[ERROR]{Fore.RESET} Failed to monitor {name}: {path}")
+        input("-> Please check your configuration and make sure the folder exists.")
+        sys.exit(1)
+
 
 observer.start()
 
