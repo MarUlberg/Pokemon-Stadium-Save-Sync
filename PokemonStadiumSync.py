@@ -286,6 +286,35 @@ def get_transferpak_indicator(slot):
         return f"{Fore.LIGHTBLACK_EX}]TransferPak{Fore.YELLOW}2{Fore.RESET}"
     return ""
 
+def prepare_transferpak_roms():
+    """Copies GB ROMs for TransferPak slots to the TransferPak folder if needed."""
+    for pak_slot, rom_key in [(retroarch_transferpak1, "stadium 1"), (retroarch_transferpak2, "stadium 2")]:
+        if not pak_slot:
+            continue  # Skip empty assignments
+
+        n64_rom_name = n64_roms.get(rom_key, "").strip()
+        if not n64_rom_name:
+            continue
+
+        rom_output_path = os.path.join(sav_dir, f"{n64_rom_name}.gb")
+        if os.path.exists(rom_output_path):
+            continue  # Already present, skip
+
+        game_key = pak_slot.lower()
+        matching_prefix = gb_slots.get(game_key, "").lower()
+        found_rom = None
+        for ext in [".gb", ".gbc"]:
+            candidate = os.path.join(gbrom_dir, f"{matching_prefix}{ext}")
+            if os.path.exists(candidate):
+                found_rom = candidate
+                break
+
+        if found_rom:
+            shutil.copy2(found_rom, rom_output_path)
+            print(f"[INFO] Copied GB ROM for {format_game_name(pak_slot)} → {n64_rom_name}.gb")
+        else:
+            print(f"[WARNING] No GB ROM found for {format_game_name(pak_slot)} in gbrom_dir.")
+
 def sync_files(slot, srm, sav, monitoring=False):
     color = slot_colors.get(slot.lower(), Fore.WHITE)
     formatted_slot = f"{color}{format_game_name(slot)}{Fore.RESET}"
@@ -327,6 +356,7 @@ def sync_files(slot, srm, sav, monitoring=False):
         shutil.copy2(sav, srm)
         os.utime(srm, (sav_time, sav_time))
 
+
 # Sync GB slots
 for game_name, srm_filename in gb_slots.items():
     srm_path = os.path.join(gb_dir, f"{srm_filename}.srm")
@@ -341,6 +371,7 @@ for game_name, srm_filename in gb_slots.items():
         sav_filename = f"{rom}.sav" if rom else f"TransferPak2_{format_game_name(game_name)}.sav"
     else:
         sav_filename = f"PkmnTransferPak{slot_number} {formatted_game_name}.sav"
+
 
     sav_path = os.path.join(sav_dir, sav_filename)
     sync_files(game_name, srm_path, sav_path)
@@ -424,9 +455,9 @@ class SaveFileEventHandler(FileSystemEventHandler):
             sav_filename = f"PkmnTransferPak{slot_number} {formatted_game_name}.sav"
 
             if game_name == retroarch_transferpak1.lower():
-                sav_filename = f"{n64_roms.get('Stadium 1', '')}.sav"
+                sav_filename = f"{n64_roms.get('stadium 1', '')}.sav"
             elif game_name == retroarch_transferpak2.lower():
-                sav_filename = f"{n64_roms.get('Stadium 2', '')}.sav"
+                sav_filename = f"{n64_roms.get('stadium 2', '')}.sav"
 
             sav_path = os.path.normcase(os.path.abspath(os.path.join(sav_dir, sav_filename)))
 
@@ -468,7 +499,7 @@ for name, path in [
         input("-> Please check your configuration and make sure the folder exists.")
         sys.exit(1)
 
-
+prepare_transferpak_roms()
 observer.start()
 
 print()
@@ -489,9 +520,9 @@ def periodic_sync_check(interval=120):
             sav_filename = f"PkmnTransferPak{slot_number} {formatted_game_name}.sav"
 
             if game_name == retroarch_transferpak1.lower():
-                sav_filename = f"{n64_roms.get('Stadium 1', '')}.sav"
+                sav_filename = f"{n64_roms.get('stadium 1', '')}.sav"
             elif game_name == retroarch_transferpak2.lower():
-                sav_filename = f"{n64_roms.get('Stadium 2', '')}.sav"
+                sav_filename = f"{n64_roms.get('stadium 2', '')}.sav"
 
             sav_path = os.path.abspath(os.path.join(sav_dir, sav_filename))
 
