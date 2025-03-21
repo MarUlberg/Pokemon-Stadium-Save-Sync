@@ -65,18 +65,21 @@ def check_minimize():
 
 def setup_tray():
     """Creates and runs the system tray icon, allowing manual minimization."""
+    icon_path = "PokemonStadiumSync.ico"
+    if not os.path.exists(icon_path):
+        print("[INFO] PokemonStadiumSync.ico can't be found. Minimize to system tray disabled.")
+        return  # ← prevent tray and check_minimize thread from starting
+
     try:
-        image = Image.open("PokemonStadiumSync.ico")  # Ensure correct icon path
+        image = Image.open(icon_path)
     except Exception as e:
-        print(f"Error loading tray icon: {e}")
-        return  # Don't exit the script if the icon fails to load
+        print(f"[ERROR] Failed to load tray icon: {e}")
+        return
 
     menu = (item('Open Console', show_terminal), item('Exit', exit_program))
     tray_icon = Icon("PokemonStadiumSync", image, menu=menu)
 
-    # Start monitoring for manual minimization
     threading.Thread(target=check_minimize, daemon=True).start()
-
     tray_icon.run()
     
 
@@ -223,7 +226,7 @@ def kill_previous_instances():
     # Keep the most recent instance and terminate all older ones
     for process_pid, process_name, _ in instances[:-1]:  # Keep only the last (newest) instance
         try:
-            print(f"🛠️ DEBUG: Killing older instance (PID {process_pid}) - {process_name}")
+            print(f"[INFO]: Killing older instance (PID {process_pid})")
             psutil.Process(process_pid).terminate()
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue
@@ -298,7 +301,7 @@ def sync_files(slot, srm, sav, monitoring=False):
         timestamp = ""
 
     if not srm_exists:
-        print(f"{timestamp}{formatted_slot}: {Fore.LIGHTBLACK_EX}.srm file does not exist. Sync aborted.{Fore.RESET}")
+        print(f"{timestamp}{formatted_slot}: {Fore.LIGHTBLACK_EX}.srm file does not exist.{Fore.RESET}")
         return
 
     if not sav_exists:
