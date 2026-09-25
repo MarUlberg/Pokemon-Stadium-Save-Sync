@@ -1,89 +1,134 @@
-### ==================  Import Dependencies ================== ###
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Project: Pokémon Stadium Sync
+Module: PokemonStadiumSync.py
+Author: Martinius Ulberg
+Contact: MarUlberg@gmail.com
+License: MIT License
+Description:
+    Synchronize Pokémon Game Boy and Game Boy Advance save files between
+    RetroArch save locations and Nintendo 64 Transfer Pak save files.
+    Monitor save directories for changes and automatically synchronize
+    updated .srm and .sav files for Pokémon Stadium, Pokémon Stadium 2,
+    supported Game Boy titles, Game Boy Advance titles, and configured
+    Pokémon ROM hacks.
+"""
 
-# Standard Library Imports
 import os
 import sys
 import time
+import ctypes
 import shutil
 import threading
-import ctypes
 import configparser
 
 # Third-Party Modules
 import psutil  # Process monitoring
 import pystray  # System tray management
 import watchdog  # File monitoring
-from watchdog.observers import Observer
+from colorama import Fore, init  # Colored terminal output
+from PIL import Image  # Tray icon handling
+from pystray import Icon, MenuItem as item
 from watchdog.events import FileSystemEventHandler
-from pystray import MenuItem as item, Icon
-from PIL import Image  # Used for tray icon handling
-from colorama import init, Fore  # Colored terminal output
+from watchdog.observers import Observer
 
-### ==================  Global Variables & Initialization ================== ###
+
+# ============================================================
+# Global Variables & Initialization
+# ============================================================
 
 # Initialize Colorama for colored terminal output
 init(autoreset=True)
 
 # Windows-Specific Console Handling
 whnd = None
+
 if sys.platform == "win32":
     whnd = ctypes.windll.kernel32.GetConsoleWindow()
 
 # Tracking Sync Status
-last_sync_time = {}      # Tracks last synchronization timestamps
-file_last_checked = {}   # Tracks when files were last checked
-file_last_modified = {}  # Tracks last modified timestamps
-file_last_synced = {}    # Tracks when files were last successfully synced
+last_sync_time = {}
+file_last_checked = {}
+file_last_modified = {}
+file_last_synced = {}
 
-### ==================  System Tray Functions ================== ###
+
+# ============================================================
+# System Tray Functions
+# ============================================================
 
 def hide_terminal():
-    """Hides the console window (Windows only)."""
+    """Hide the console window on Windows."""
     global whnd
+
     if sys.platform == "win32" and whnd:
         ctypes.windll.user32.ShowWindow(whnd, 0)
 
+
 def show_terminal(icon, item):
-    """Restores the console window (Windows only)."""
+    """Restore the console window on Windows."""
     global whnd
+
     if sys.platform == "win32" and whnd:
         ctypes.windll.user32.ShowWindow(whnd, 1)
 
+
 def exit_program(icon, item):
-    """Stops the system tray icon and exits the program."""
+    """Stop the system tray icon and exit the program."""
     icon.stop()
     sys.exit()
 
+
 def check_minimize():
-    """Continuously monitors the window state and hides it when minimized."""
-    global whnd
+    """Monitor the window state and hide it when minimized."""
     while True:
         time.sleep(1)
+
         if sys.platform == "win32" and whnd:
-            if ctypes.windll.user32.IsIconic(whnd):  # If the window is minimized
+            if ctypes.windll.user32.IsIconic(whnd):
                 hide_terminal()
 
+
 def setup_tray():
-    """Creates and runs the system tray icon, allowing manual minimization."""
+    """Create and run the system tray icon."""
     icon_path = "PokemonStadiumSync.ico"
+
     if not os.path.exists(icon_path):
-        print("[INFO] PokemonStadiumSync.ico can't be found. Minimize to system tray disabled.")
-        return  # ← prevent tray and check_minimize thread from starting
+        print(
+            "[INFO] PokemonStadiumSync.ico can't be found. "
+            "Minimize to system tray disabled."
+        )
+        return
 
     try:
         image = Image.open(icon_path)
-    except Exception as e:
-        print(f"[ERROR] Failed to load tray icon: {e}")
+    except Exception as exc:
+        print(f"[ERROR] Failed to load tray icon: {exc}")
         return
 
-    menu = (item('Open Console', show_terminal), item('Exit', exit_program))
-    tray_icon = Icon("PokemonStadiumSync", image, menu=menu)
+    menu = (
+        item("Open Console", show_terminal),
+        item("Exit", exit_program),
+    )
 
-    threading.Thread(target=check_minimize, daemon=True).start()
+    tray_icon = Icon(
+        "PokemonStadiumSync",
+        image,
+        menu=menu,
+    )
+
+    threading.Thread(
+        target=check_minimize,
+        daemon=True,
+    ).start()
+
     tray_icon.run()
-    
 
-### ==================  Configuration Handling ================== ###
+
+# ============================================================
+# Configuration Handling
+# ============================================================
 
 # Initialize Config Parser
 config = configparser.ConfigParser()
@@ -123,17 +168,23 @@ DEFAULT_CONFIG = {
         "Emerald": "Pokemon - Emerald Version (USA, Europe)",  # GBA Slot3 - Pokemon - Emerald Version (.srm)
         "FireRed": "Pokemon - FireRed Version (USA, Europe)",  # GBA Slot4 - Pokemon - FireRed Version (.srm)
         "LeafGreen": "Pokemon - LeafGreen Version (USA, Europe)"  # GBA Slot5 - Pokemon - LeafGreen Version (.srm)
+    },
+    "Hack": {
+        "Hack": "Pokémon - Emerald Rogue (v2.0.1a-EX) (Pokabbie)"
     }
 }
 
 def load_config():
-    """Loads configuration from file. Exits if file is missing or incomplete."""
-    if not os.path.exists(CONFIG_FILE):
-        print(f"\n{Fore.RED}[ERROR]{Fore.RESET} Config file '{CONFIG_FILE}' not found.")
-        input("-> Please run the configuration tool (UI) to set it up before using this sync script.")
-        sys.exit(1)
+    config = configparser.ConfigParser()
+    config.optionxform = str
 
-    config.read(CONFIG_FILE)
+    if not os.path.exists(CONFIG_FILE):
+        print(f"Config file not found: {CONFIG_FILE}")
+        return None
+
+    config.read(CONFIG_FILE, encoding="utf-8")
+
+    return config
 
     # Warn if any section or key is missing
     for section, keys in DEFAULT_CONFIG.items():
@@ -147,7 +198,10 @@ def load_config():
 
 
 # Load Configuration
-load_config()
+config = load_config()
+
+if config is None:
+    sys.exit(1)
 
 # Read General Settings
 stay_open = config.getboolean('General', 'stay_open', fallback=True)
@@ -241,6 +295,7 @@ kill_previous_instances()
 n64_roms = {key.lower(): value for key, value in config.items('StadiumROMs')} if config.has_section('StadiumROMs') else {}
 gb_slots = {key.lower(): value for key, value in config.items('GBSlots')} if config.has_section('GBSlots') else {}
 gba_slots = {key.lower(): value for key, value in config.items('GBASlots')} if config.has_section('GBASlots') else {}
+hack_slots = {key.lower(): value for key, value in config.items('Hack')} if config.has_section('Hack') else {}
 
 # Assign Slot Numbers Dynamically
 def assign_slot_numbers():
@@ -268,7 +323,8 @@ slot_colors = {
     "sapphire": Fore.BLUE,
     "emerald": Fore.GREEN,
     "leafgreen": Fore.LIGHTGREEN_EX,
-    "firered": Fore.LIGHTRED_EX
+    "firered": Fore.LIGHTRED_EX,
+    "hack": Fore.MAGENTA
 }
 
 
@@ -394,6 +450,12 @@ for gba_slot, rom_filename in gba_slots.items():
     srm_path = os.path.join(gba_dir, f"{rom_filename}.srm")
     sav_path = os.path.join(sav_dir, f"{rom_filename}-2.sav")
     sync_files(gba_slot, srm_path, sav_path)
+    
+# Sync Hack slots
+for hack_slot, rom_filename in hack_slots.items():
+    srm_path = os.path.join(gba_dir, f"{rom_filename}.srm")
+    sav_path = os.path.join(sav_dir, f"{rom_filename}.sav")
+    sync_files(hack_slot, srm_path, sav_path)
 
  
 ### ==================  File Monitoring ================== ###
@@ -455,43 +517,152 @@ class SaveFileEventHandler(FileSystemEventHandler):
         if event.is_directory:
             return
 
-        filepath = os.path.normcase(os.path.abspath(event.src_path))
+        filepath = os.path.normcase(
+            os.path.abspath(event.src_path)
+        )
 
-        # Track whether we already handled a match to prevent duplicate processing
+        # Track whether we already handled a match
+        # to prevent duplicate processing.
         handled = False
 
+        # --------------------------------------------------
         # Check GB save files
+        # --------------------------------------------------
         for game_name, srm_filename in gb_slots.items():
-            srm_path = os.path.normcase(os.path.abspath(os.path.join(gb_dir, f"{srm_filename}.srm")))
-            slot_number = slot_numbers.get(game_name, 'X')
-            formatted_game_name = format_game_name(game_name)
-            sav_filename = f"PkmnTransferPak{slot_number} {formatted_game_name}.sav"
+            srm_path = os.path.normcase(
+                os.path.abspath(
+                    os.path.join(
+                        gb_dir,
+                        f"{srm_filename}.srm"
+                    )
+                )
+            )
+
+            slot_number = slot_numbers.get(
+                game_name,
+                'X'
+            )
+
+            formatted_game_name = format_game_name(
+                game_name
+            )
+
+            sav_filename = (
+                f"PkmnTransferPak"
+                f"{slot_number} "
+                f"{formatted_game_name}.sav"
+            )
 
             if game_name == retroarch_transferpak1.lower():
-                sav_filename = f"{n64_roms.get('stadium 1', '')}.sav"
+                sav_filename = (
+                    f"{n64_roms.get('stadium 1', '')}.sav"
+                )
+
             elif game_name == retroarch_transferpak2.lower():
-                sav_filename = f"{n64_roms.get('stadium 2', '')}.sav"
+                sav_filename = (
+                    f"{n64_roms.get('stadium 2', '')}.sav"
+                )
 
-            sav_path = os.path.normcase(os.path.abspath(os.path.join(sav_dir, sav_filename)))
+            sav_path = os.path.normcase(
+                os.path.abspath(
+                    os.path.join(
+                        sav_dir,
+                        sav_filename
+                    )
+                )
+            )
 
-            if filepath in [srm_path, sav_path] and should_sync(srm_path, sav_path):
-                if not handled:
-                    sync_files(game_name, srm_path, sav_path, monitoring=True)
-                    handled = True
-                return  # Exit after first sync
+            if filepath in [srm_path, sav_path]:
+                if should_sync(srm_path, sav_path):
+                    if not handled:
+                        sync_files(
+                            game_name,
+                            srm_path,
+                            sav_path,
+                            monitoring=True
+                        )
+                        handled = True
 
+                    return
+
+        # --------------------------------------------------
         # Check GBA save files
+        # --------------------------------------------------
         for gba_slot, rom_filename in gba_slots.items():
-            srm_path = os.path.normcase(os.path.abspath(os.path.join(gba_dir, f"{rom_filename}.srm")))
-            sav_filename = f"{rom_filename}-2.sav"
-            sav_path = os.path.normcase(os.path.abspath(os.path.join(sav_dir, sav_filename)))
+            srm_path = os.path.normcase(
+                os.path.abspath(
+                    os.path.join(
+                        gba_dir,
+                        f"{rom_filename}.srm"
+                    )
+                )
+            )
 
-            if filepath in [srm_path, sav_path] and should_sync(srm_path, sav_path):
-                if not handled:
-                    sync_files(gba_slot, srm_path, sav_path, monitoring=True)
-                    handled = True
-                return  # Exit after first sync
+            sav_filename = (
+                f"{rom_filename}-2.sav"
+            )
 
+            sav_path = os.path.normcase(
+                os.path.abspath(
+                    os.path.join(
+                        sav_dir,
+                        sav_filename
+                    )
+                )
+            )
+
+            if filepath in [srm_path, sav_path]:
+                if should_sync(srm_path, sav_path):
+                    if not handled:
+                        sync_files(
+                            gba_slot,
+                            srm_path,
+                            sav_path,
+                            monitoring=True
+                        )
+                        handled = True
+
+                    return
+
+        # --------------------------------------------------
+        # Check Hack save files
+        #
+        # Hack uses the SAME filename on both sides.
+        # Only the extension changes:
+        #
+        #     .srm <-> .sav
+        # --------------------------------------------------
+        for hack_slot, rom_filename in hack_slots.items():
+            srm_path = os.path.normcase(
+                os.path.abspath(
+                    os.path.join(
+                        gba_dir,
+                        f"{rom_filename}.srm"
+                    )
+                )
+            )
+
+            sav_path = os.path.normcase(
+                os.path.abspath(
+                    os.path.join(
+                        sav_dir,
+                        f"{rom_filename}.sav"
+                    )
+                )
+            )
+
+            if filepath in [srm_path, sav_path]:
+                if should_sync(srm_path, sav_path):
+                    if not handled:
+                        sync_files(
+                            hack_slot,
+                            srm_path,
+                            sav_path,
+                            monitoring=True
+                        )
+                        handled = True
+
+                    return
 
 # Initialize and start the watchdog observer
 observer = Observer()
@@ -559,6 +730,25 @@ def periodic_sync_check(interval=120):
                 sync_files(gba_slot, srm_path, sav_path, monitoring=True)
                 last_synced[gba_slot] = time.time()  # Update last sync time
 
+        # Periodically check Hack save files
+        for hack_slot, rom_filename in hack_slots.items():
+            srm_path = os.path.abspath(
+                os.path.join(gba_dir, f"{rom_filename}.srm")
+            )
+            sav_path = os.path.abspath(
+                os.path.join(sav_dir, f"{rom_filename}.sav")
+            )
+
+            last_sync_time = last_synced.get(hack_slot, 0)
+
+            if should_sync(srm_path, sav_path) and (time.time() - last_sync_time > 5):
+                sync_files(
+                    hack_slot,
+                    srm_path,
+                    sav_path,
+                    monitoring=True
+                )
+                last_synced[hack_slot] = time.time()
 
 
 # Start periodic checker in background

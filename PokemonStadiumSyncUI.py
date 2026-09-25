@@ -1,8 +1,24 @@
-### ==================  Import Dependencies ================== ###
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Project: PokemonStadiumSync
+Module: PokemonStadiumSyncUI.py
+Author: Martinius Ulberg
+Contact: MarUlberg@gmail.com
+License: MIT License
+Description:
+    Provide the graphical configuration interface for PokemonStadiumSync.
+    Configure RetroArch directories, Transfer Pak assignments, Pokémon
+    Stadium ROMs, Game Boy and Game Boy Advance save slots, and supported
+    ROM hacks. Detect and validate configured files and directories, search
+    the RetroArch installation for missing entries, and save the resulting
+    configuration to PokemonStadiumSync.cfg for use by the main
+    PokemonStadiumSync synchronization script.
+"""
 
-import configparser
 import os
 import sys
+import configparser
 import tkinter as tk
 from tkinter import filedialog
 
@@ -40,6 +56,9 @@ DEFAULT_CONFIG = {
         "Emerald": "Pokemon - Emerald Version (USA, Europe)",  # GBA Slot3 - Pokemon - Emerald Version (.srm)
         "FireRed": "Pokemon - FireRed Version (USA, Europe)",  # GBA Slot4 - Pokemon - FireRed Version (.srm)
         "LeafGreen": "Pokemon - LeafGreen Version (USA, Europe)"  # GBA Slot5 - Pokemon - LeafGreen Version (.srm)
+    },
+    "Hack": {
+        "Hack": "Pokémon - Emerald Rogue (v2.0.1a-EX) (Pokabbie)"
     }
 }
 
@@ -64,33 +83,44 @@ def browse_path(entry_key):
     if entry_key == "base_dir":
         path = browse_directory(initial_dir)
         last_found_type = "base_dir"
+
     elif entry_key in ["gb_dir", "gba_dir", "sav_dir", "gbrom_dir"]:
         subfolder = entries[entry_key].get().strip()
         initial_subdir = os.path.join(initial_dir, os.path.normpath(subfolder))
         path = browse_directory(initial_subdir)
         last_found_type = "subfolder"
+
     elif entry_key in ["Stadium 1", "Stadium 2"]:
         sav_dir = entries["sav_dir"].get().strip()
         initial_sav_dir = os.path.join(initial_dir, os.path.normpath(sav_dir))
         path = browse_file(initial_sav_dir, [("N64 ROMs", "*.n64 *.z64")])
         last_found_type = "stadium_rom"
+
     elif entry_key in ["Green", "Red", "Blue", "Yellow", "Gold", "Silver", "Crystal"]:
         gb_dir = entries["gb_dir"].get().strip()
         initial_gb_dir = os.path.join(initial_dir, os.path.normpath(gb_dir))
         path = browse_file(initial_gb_dir, [("GB Save Files", "*.srm")])
         last_found_type = "gb_slot"
+
     elif entry_key in ["Ruby", "Sapphire", "Emerald", "FireRed", "LeafGreen"]:
         gba_dir = entries["gba_dir"].get().strip()
         initial_gba_dir = os.path.join(initial_dir, os.path.normpath(gba_dir))
         path = browse_file(initial_gba_dir, [("GBA Save Files", "*.srm")])
         last_found_type = "gba_slot"
 
+    elif entry_key == "Hack":
+        gba_dir = entries["gba_dir"].get().strip()
+        initial_hack_dir = os.path.join(initial_dir, os.path.normpath(gba_dir))
+        path = browse_file(initial_hack_dir, [("GBA Save Files", "*.srm")])
+        last_found_type = "hack_slot"
+
     if path:
         last_found = os.path.normpath(path)
         normalized_path = last_found.replace("\\", "/")
 
-        if last_found_type in ["gb_slot", "gba_slot"]:
+        if last_found_type in ["gb_slot", "gba_slot", "hack_slot"]:
             normalized_path = os.path.splitext(os.path.basename(normalized_path))[0]
+
         elif last_found_type == "stadium_rom":
             normalized_path = os.path.basename(normalized_path)
 
@@ -98,7 +128,7 @@ def browse_path(entry_key):
         entries[entry_key].insert(0, normalized_path)
 
         update_status_icons()
-        detect_and_set_base_directory(last_found)
+        detect_and_set_base_directory()
 
         if last_found_type == "subfolder":
             trim_base_dir_from_subfolders(initial_dir)
@@ -108,79 +138,216 @@ def browse_path(entry_key):
 ### ==================  Search Button ================== ###
 def search_for_files():
     base_dir = entries["base_dir"].get().strip()
+
     if not os.path.exists(base_dir):
         return print("❌ Search Aborted: Base directory does not exist.")
 
     file_index, folder_counts = {}, {}
 
-    # Indexing files
+    # Index files
     for root, _, files in os.walk(base_dir):
         for file in files:
-            rel_path = os.path.relpath(os.path.join(root, file), base_dir).replace("\\", "/")
+            rel_path = os.path.relpath(
+                os.path.join(root, file),
+                base_dir
+            ).replace("\\", "/")
+
             file_index[file.lower()] = (rel_path, file)
+
             if file.lower().endswith((".gb", ".gbc")):
                 folder_counts[root] = folder_counts.get(root, 0) + 1
 
+    # Find best GB ROM directory
     if folder_counts:
         best_gbrom_dir = max(folder_counts, key=folder_counts.get)
-        current_gbrom_dir = os.path.join(base_dir, entries["gbrom_dir"].get().strip())
+        current_gbrom_dir = os.path.join(
+            base_dir,
+            entries["gbrom_dir"].get().strip()
+        )
+
         if not os.path.exists(current_gbrom_dir):
             entries["gbrom_dir"].delete(0, tk.END)
-            entries["gbrom_dir"].insert(0, os.path.relpath(best_gbrom_dir, base_dir).replace("\\", "/"))
+            entries["gbrom_dir"].insert(
+                0,
+                os.path.relpath(best_gbrom_dir, base_dir).replace("\\", "/")
+            )
 
-    # Search for missing GB/GBA saves and populate subfolder if needed
-    for key in ["Green", "Red", "Blue", "Yellow", "Gold", "Silver", "Crystal"]:
+    # Search for missing GB saves
+    for key in [
+        "Green",
+        "Red",
+        "Blue",
+        "Yellow",
+        "Gold",
+        "Silver",
+        "Crystal"
+    ]:
         current_value = entries[key].get().strip()
         gb_subfolder = entries["gb_dir"].get().strip()
-        full_path = os.path.join(base_dir, gb_subfolder, current_value + ".srm").replace("\\", "/")
+
+        full_path = os.path.join(
+            base_dir,
+            gb_subfolder,
+            current_value + ".srm"
+        ).replace("\\", "/")
 
         if not os.path.exists(full_path):
-            potential_match = next((f for f in file_index if f.startswith(f"pokemon - {key.lower()} version") and f.endswith(".srm")), None)
+            potential_match = next(
+                (
+                    f for f in file_index
+                    if f.startswith(f"pokemon - {key.lower()} version")
+                    and f.endswith(".srm")
+                ),
+                None
+            )
+
             if potential_match:
                 found_path = file_index[potential_match][0]
-                entries[key].delete(0, tk.END)
-                entries[key].insert(0, os.path.splitext(file_index[potential_match][1])[0])
 
-                # Update GB subfolder if invalid
+                entries[key].delete(0, tk.END)
+                entries[key].insert(
+                    0,
+                    os.path.splitext(file_index[potential_match][1])[0]
+                )
+
                 detected_gb_dir = os.path.dirname(found_path)
-                if not os.path.exists(os.path.join(base_dir, gb_subfolder)):
+
+                if not os.path.exists(
+                    os.path.join(base_dir, gb_subfolder)
+                ):
                     entries["gb_dir"].delete(0, tk.END)
                     entries["gb_dir"].insert(0, detected_gb_dir)
 
-    for key in ["Ruby", "Sapphire", "Emerald", "FireRed", "LeafGreen"]:
+    # Search for missing GBA saves
+    for key in [
+        "Ruby",
+        "Sapphire",
+        "Emerald",
+        "FireRed",
+        "LeafGreen"
+    ]:
         current_value = entries[key].get().strip()
         gba_subfolder = entries["gba_dir"].get().strip()
-        full_path = os.path.join(base_dir, gba_subfolder, current_value + ".srm").replace("\\", "/")
+
+        full_path = os.path.join(
+            base_dir,
+            gba_subfolder,
+            current_value + ".srm"
+        ).replace("\\", "/")
 
         if not os.path.exists(full_path):
-            potential_match = next((f for f in file_index if f.startswith(f"pokemon - {key.lower()} version") and f.endswith(".srm")), None)
+            potential_match = next(
+                (
+                    f for f in file_index
+                    if f.startswith(f"pokemon - {key.lower()} version")
+                    and f.endswith(".srm")
+                ),
+                None
+            )
+
             if potential_match:
                 found_path = file_index[potential_match][0]
-                entries[key].delete(0, tk.END)
-                entries[key].insert(0, os.path.splitext(file_index[potential_match][1])[0])
 
-                # Update GBA subfolder if invalid
+                entries[key].delete(0, tk.END)
+                entries[key].insert(
+                    0,
+                    os.path.splitext(file_index[potential_match][1])[0]
+                )
+
                 detected_gba_dir = os.path.dirname(found_path)
-                if not os.path.exists(os.path.join(base_dir, gba_subfolder)):
+
+                if not os.path.exists(
+                    os.path.join(base_dir, gba_subfolder)
+                ):
                     entries["gba_dir"].delete(0, tk.END)
                     entries["gba_dir"].insert(0, detected_gba_dir)
 
-    # Find N64 ROMs and set TransferPak subfolder if needed
-    for stadium, stadium_prefix in [("Stadium 1", "pokemon stadium"), ("Stadium 2", "pokemon stadium 2")]:
+    # Search for Hack save
+    current_value = entries["Hack"].get().strip()
+    gba_subfolder = entries["gba_dir"].get().strip()
+
+    full_path = os.path.join(
+        base_dir,
+        gba_subfolder,
+        current_value + ".srm"
+    ).replace("\\", "/")
+
+    if not os.path.exists(full_path):
+        potential_match = next(
+            (
+                f for f in file_index
+                if f.startswith("pokémon - emerald rogue")
+                and f.endswith(".srm")
+            ),
+            None
+        )
+
+        # Also support a filename without the accented é
+        if not potential_match:
+            potential_match = next(
+                (
+                    f for f in file_index
+                    if f.startswith("pokemon - emerald rogue")
+                    and f.endswith(".srm")
+                ),
+                None
+            )
+
+        if potential_match:
+            found_path = file_index[potential_match][0]
+
+            entries["Hack"].delete(0, tk.END)
+            entries["Hack"].insert(
+                0,
+                os.path.splitext(file_index[potential_match][1])[0]
+            )
+
+            detected_hack_dir = os.path.dirname(found_path)
+
+            if not os.path.exists(
+                os.path.join(base_dir, gba_subfolder)
+            ):
+                entries["gba_dir"].delete(0, tk.END)
+                entries["gba_dir"].insert(0, detected_hack_dir)
+
+    # Find N64 ROMs
+    for stadium, stadium_prefix in [
+        ("Stadium 1", "pokemon stadium"),
+        ("Stadium 2", "pokemon stadium 2")
+    ]:
         current_value = entries[stadium].get().strip()
         sav_subfolder = entries["sav_dir"].get().strip()
-        full_path = os.path.join(base_dir, sav_subfolder, current_value).replace("\\", "/")
+
+        full_path = os.path.join(
+            base_dir,
+            sav_subfolder,
+            current_value
+        ).replace("\\", "/")
 
         if not os.path.exists(full_path):
-            potential_match = next((f for f in file_index if f.startswith(stadium_prefix) and f.endswith((".n64", ".z64"))), None)
+            potential_match = next(
+                (
+                    f for f in file_index
+                    if f.startswith(stadium_prefix)
+                    and f.endswith((".n64", ".z64"))
+                ),
+                None
+            )
+
             if potential_match:
                 found_path = file_index[potential_match][0]
-                entries[stadium].delete(0, tk.END)
-                entries[stadium].insert(0, file_index[potential_match][1])
 
-                # Update sav subfolder if invalid
+                entries[stadium].delete(0, tk.END)
+                entries[stadium].insert(
+                    0,
+                    file_index[potential_match][1]
+                )
+
                 detected_sav_dir = os.path.dirname(found_path)
-                if not os.path.exists(os.path.join(base_dir, sav_subfolder)):
+
+                if not os.path.exists(
+                    os.path.join(base_dir, sav_subfolder)
+                ):
                     entries["sav_dir"].delete(0, tk.END)
                     entries["sav_dir"].insert(0, detected_sav_dir)
 
@@ -217,44 +384,96 @@ def update_status_icons():
 
     for key, entry in entries.items():
         try:
-            if isinstance(entry, tk.Entry):  # Handle text fields
+            if isinstance(entry, tk.Entry):
                 path = entry.get().strip()
 
-                if not path:  # Skip empty paths
+                if not path:
                     update_entry_status(key, None, False)
                     continue
 
                 path = os.path.normpath(path)
 
-                if key in ["gb_dir", "gba_dir", "sav_dir", "gbrom_dir"]:  # Subfolders
+                if key in [
+                    "gb_dir",
+                    "gba_dir",
+                    "sav_dir",
+                    "gbrom_dir"
+                ]:
                     path = os.path.join(base_dir, path)
-                elif key in ["Stadium 1", "Stadium 2"]:  # N64 ROMs
-                    path = os.path.join(base_dir, entries["sav_dir"].get().strip(), path)
-                elif key in ["Green", "Red", "Blue", "Yellow", "Gold", "Silver", "Crystal"]:  # GB Saves
-                    path = os.path.join(base_dir, entries["gb_dir"].get().strip(), path + ".srm")
-                elif key in ["Ruby", "Sapphire", "Emerald", "FireRed", "LeafGreen"]:  # GBA Saves
-                    path = os.path.join(base_dir, entries["gba_dir"].get().strip(), path + ".srm")
+
+                elif key in ["Stadium 1", "Stadium 2"]:
+                    path = os.path.join(
+                        base_dir,
+                        entries["sav_dir"].get().strip(),
+                        path
+                    )
+
+                elif key in [
+                    "Green",
+                    "Red",
+                    "Blue",
+                    "Yellow",
+                    "Gold",
+                    "Silver",
+                    "Crystal"
+                ]:
+                    path = os.path.join(
+                        base_dir,
+                        entries["gb_dir"].get().strip(),
+                        path + ".srm"
+                    )
+
+                elif key in [
+                    "Ruby",
+                    "Sapphire",
+                    "Emerald",
+                    "FireRed",
+                    "LeafGreen",
+                    "Hack"
+                ]:
+                    path = os.path.join(
+                        base_dir,
+                        entries["gba_dir"].get().strip(),
+                        path + ".srm"
+                    )
 
                 exists = os.path.exists(path)
                 update_entry_status(key, path, exists)
 
-            elif isinstance(entry, tk.StringVar):  # Handle dropdowns
-                update_entry_status(key, None, bool(entry.get().strip()))
+            elif isinstance(entry, tk.StringVar):
+                update_entry_status(
+                    key,
+                    None,
+                    bool(entry.get().strip())
+                )
 
         except Exception as e:
             print(f"⚠️ Error updating status for {key}: {e}")
-            status_labels[key].config(text="⚠️", fg="red")  # Set to error state
+            status_labels[key].config(
+                text="⚠️",
+                fg="red"
+            )
 
-    # ✅ Run a second time to update TransferPak dropdowns AFTER save slots are updated
-    for key in ["RetroarchTransferPak1", "RetroarchTransferPak2"]:
+    # Update TransferPak dropdown statuses after save slots
+    for key in [
+        "RetroarchTransferPak1",
+        "RetroarchTransferPak2"
+    ]:
         selected_game = entries[key].get().strip()
+
         if selected_game and selected_game in status_labels:
             game_status_icon = status_labels[selected_game].cget("text")
             game_status_color = status_labels[selected_game].cget("fg")
-            status_labels[key].config(text=game_status_icon, fg=game_status_color)
-        else:
-            status_labels[key].config(text="⚠️", fg="yellow")  # Default warning if empty
 
+            status_labels[key].config(
+                text=game_status_icon,
+                fg=game_status_color
+            )
+        else:
+            status_labels[key].config(
+                text="⚠️",
+                fg="yellow"
+            )
 
 
 
@@ -313,8 +532,15 @@ def trim_base_dir_from_subfolders(base_dir):
 
 def trim_base_dir_from_files(base_dir):
     """Trims the base directory from save slots and Stadium ROMs."""
-    trim_base_dir(base_dir, ["Stadium 1", "Stadium 2", "Green", "Red", "Blue", "Yellow", "Gold", "Silver", "Crystal",
-                             "Ruby", "Sapphire", "Emerald", "FireRed", "LeafGreen"])
+    trim_base_dir(
+        base_dir,
+        [
+            "Stadium 1", "Stadium 2",
+            "Green", "Red", "Blue", "Yellow", "Gold", "Silver", "Crystal",
+            "Ruby", "Sapphire", "Emerald", "FireRed", "LeafGreen",
+            "Hack"
+        ]
+    )
 
 
 
@@ -370,53 +596,87 @@ def auto_populate_subfolder():
 
     if not last_found or not last_found_type:
         print("❌ auto_populate_subfolder: No valid path found. Skipping.")
-        return  # No valid path found
+        return
 
-    base_dir = os.path.normpath(entries["base_dir"].get().strip())  # Get base directory
-    relative_path = os.path.relpath(last_found, base_dir).replace("\\", "/")  # Trim base dir
-    subfolder_path = os.path.dirname(relative_path)  # Remove the filename
+    base_dir = os.path.normpath(
+        entries["base_dir"].get().strip()
+    )
 
-    print(f"🔍 auto_populate_subfolder: last_found = {last_found}, last_found_type = {last_found_type}")
-    print(f"📁 Base Dir: {base_dir} | Relative Path: {relative_path} | Subfolder Path: {subfolder_path}")
+    relative_path = os.path.relpath(
+        last_found,
+        base_dir
+    ).replace("\\", "/")
 
-    # Debugging: Print existing UI fields
+    subfolder_path = os.path.dirname(relative_path)
+
+    print(
+        f"🔍 auto_populate_subfolder: "
+        f"last_found = {last_found}, "
+        f"last_found_type = {last_found_type}"
+    )
+
+    print(
+        f"📁 Base Dir: {base_dir} | "
+        f"Relative Path: {relative_path} | "
+        f"Subfolder Path: {subfolder_path}"
+    )
+
     print("🔎 Existing UI Entries:", entries.keys())
 
-    # Function to safely update textboxes if they don't exist
     def update_textbox_if_invalid(entry_key, value):
         """Only update the textbox if the current path is empty or invalid."""
         if entry_key in entries:
             current_path = entries[entry_key].get().strip()
-            path_exists = os.path.exists(os.path.join(base_dir, current_path))  # Check if path exists
 
-            if not path_exists:  # Only update if path does not exist
-                print(f"✔️ Auto-updating {entry_key} (previously invalid) with: {value}")
+            path_exists = os.path.exists(
+                os.path.join(base_dir, current_path)
+            )
+
+            if not path_exists:
+                print(
+                    f"✔️ Auto-updating {entry_key} "
+                    f"(previously invalid) with: {value}"
+                )
+
                 entries[entry_key].delete(0, tk.END)
                 entries[entry_key].insert(0, value)
-                entries[entry_key].update()  # Force UI refresh
+                entries[entry_key].update()
+
             else:
-                print(f"⚠️ Skipping {entry_key} - Path exists: {current_path}")
+                print(
+                    f"⚠️ Skipping {entry_key} - "
+                    f"Path exists: {current_path}"
+                )
+
         else:
-            print(f"❌ Error: {entry_key} not found in entries.")
+            print(
+                f"❌ Error: {entry_key} not found in entries."
+            )
 
-    # Determine which subfolder should be updated
     if last_found_type == "gb_slot":
-        update_textbox_if_invalid("gb_dir", subfolder_path)
+        update_textbox_if_invalid(
+            "gb_dir",
+            subfolder_path
+        )
 
-    elif last_found_type == "gba_slot":
-        update_textbox_if_invalid("gba_dir", subfolder_path)
+    elif last_found_type in ["gba_slot", "hack_slot"]:
+        update_textbox_if_invalid(
+            "gba_dir",
+            subfolder_path
+        )
 
     elif last_found_type == "stadium_rom":
-        update_textbox_if_invalid("sav_dir", subfolder_path)
+        update_textbox_if_invalid(
+            "sav_dir",
+            subfolder_path
+        )
 
-    # Ensure UI reflects the updates
     update_status_icons()
-
 
 
 ### ==================  Save configuration ================== ###
 def save_configuration():
-    """Saves the current UI values into PokemonStadiumSync.cfg"""
+    """Saves the current UI values into PokemonStadiumSync.cfg."""
     config = configparser.ConfigParser()
     config.optionxform = str
 
@@ -429,91 +689,140 @@ def save_configuration():
         section = None
         config_key = key
 
-        # Map keys to correct sections in config
-        if key in ["RetroarchTransferPak1", "RetroarchTransferPak2"]:
+        # Map keys to config sections
+        if key in [
+            "RetroarchTransferPak1",
+            "RetroarchTransferPak2"
+        ]:
             section = "Ports"
-        elif key in ["base_dir", "gb_dir", "gba_dir", "sav_dir", "gbrom_dir"]:
+
+        elif key in [
+            "base_dir",
+            "gb_dir",
+            "gba_dir",
+            "sav_dir",
+            "gbrom_dir"
+        ]:
             section = "Directories"
-        elif key in ["Stadium 1", "Stadium 2"]:
+
+        elif key in [
+            "Stadium 1",
+            "Stadium 2"
+        ]:
             section = "StadiumROMs"
-        elif key in ["Green", "Red", "Blue", "Yellow", "Gold", "Silver", "Crystal"]:
+
+        elif key in [
+            "Green",
+            "Red",
+            "Blue",
+            "Yellow",
+            "Gold",
+            "Silver",
+            "Crystal"
+        ]:
             section = "GBSlots"
-        elif key in ["Ruby", "Sapphire", "Emerald", "FireRed", "LeafGreen"]:
+
+        elif key in [
+            "Ruby",
+            "Sapphire",
+            "Emerald",
+            "FireRed",
+            "LeafGreen"
+        ]:
             section = "GBASlots"
 
-        # Special case for Stay Open checkbox
+        elif key == "Hack":
+            section = "Hack"
+
+        # Stay Open checkbox
         if key == "stay_open":
             section = "General"
             config_key = "stay_open"
-            config[section][config_key] = str(not stay_open_var.get())  # Inverted logic
+            config[section][config_key] = str(
+                not stay_open_var.get()
+            )
             continue
-            
-        # Special case for Run Minimized checkbox
+
+        # Run Minimized checkbox
         if key == "run_minimized":
             section = "General"
             config_key = "run_minimized"
-            config[section][config_key] = str(run_minimized_var.get())  
+            config[section][config_key] = str(
+                run_minimized_var.get()
+            )
             continue
 
-        # Ensure section exists
+        # Save normal entries
         if section:
             if isinstance(entry, tk.Entry):
                 value = entry.get().strip()
+
             elif isinstance(entry, tk.StringVar):
                 value = entry.get().strip()
+
             else:
-                continue  # Skip invalid entries
+                continue
 
             config[section][config_key] = value
 
-    # Write configuration to file
-    with open(CONFIG_FILE, "w") as configfile:
+    # Write configuration
+    with open(CONFIG_FILE, "w", encoding="utf-8") as configfile:
         config.write(configfile)
 
     print("✔️ Configuration saved successfully!")
-
+    
 ### ==================  Load configuration ================== ###
 def load_or_create_config():
     """Ensures the config file exists, creates missing values, and populates the UI properly."""
     config = configparser.ConfigParser()
     config.optionxform = str
 
-    # ✔️ If config file does not exist, create it first
+    # If config does not exist, create it
     if not os.path.exists(CONFIG_FILE):
         print("Config file missing! Creating a default config...")
-        write_default_config(config)  # Ensure a new config is written
+        write_default_config(config)
 
-    # ✔️ Read the config file
-    config.read(CONFIG_FILE)
+    # Read config
+    config.read(CONFIG_FILE, encoding="utf-8")
 
-    # ✔️ Ensure all expected sections and keys exist
+    # Ensure all expected sections and keys exist
     modified = False
+
     for section, keys in DEFAULT_CONFIG.items():
         if section not in config:
             config[section] = {}
             modified = True
+
         for key, default_value in keys.items():
             if key not in config[section]:
                 config[section][key] = default_value
                 modified = True
 
-    # ✔️ Save updated config if anything was missing
+    # Save updated config if anything was missing
     if modified:
-        with open(CONFIG_FILE, "w") as configfile:
+        with open(
+            CONFIG_FILE,
+            "w",
+            encoding="utf-8"
+        ) as configfile:
             config.write(configfile)
 
-    # === DEBUG: Print Config Contents ===
+    # Debug: Print config
     print("\n=== DEBUG: Config Values Loaded ===")
+
     for section in config.sections():
         for key, value in config[section].items():
-            print(f"Config: [{section}] {key} = {value}")
+            print(
+                f"Config: [{section}] {key} = {value}"
+            )
 
-    # === DEBUG: Print UI Dictionary Keys ===
+    # Debug: Print UI entries
     print("\n=== DEBUG: UI Entries Available ===")
+
     for entry_key in entries.keys():
         print(f"UI Entry: {entry_key}")
 
-    # ✔️ Mapping Config Keys to UI Keys
+    # Config key mappings
     key_mapping = {
         "retroarchtransferpak1": "RetroarchTransferPak1",
         "retroarchtransferpak2": "RetroarchTransferPak2",
@@ -527,45 +836,82 @@ def load_or_create_config():
         "run_minimized": "run_minimized",
     }
 
-    # ✔️ Populate UI elements with config values
+    # Populate UI
     print("\n=== DEBUG: Populating UI Fields ===")
+
     for section in config.sections():
         for key, value in config[section].items():
-            # Normalize and map keys properly
+
             if key in key_mapping:
                 normalized_key = key_mapping[key]
-            elif section in ["GBSlots", "GBASlots", "StadiumROMs"]:
-                normalized_key = key.replace("_", " ").title()  # Convert to match UI dropdowns
+
+            elif section in [
+                "GBSlots",
+                "GBASlots",
+                "StadiumROMs"
+            ]:
+                normalized_key = key.replace(
+                    "_",
+                    " "
+                ).title()
+
+            elif section == "Hack":
+                normalized_key = key
+
             else:
-                normalized_key = key  # Keep paths/subfolders unchanged
+                normalized_key = key
 
             if normalized_key in entries:
                 widget = entries[normalized_key]
 
-                if isinstance(widget, tk.Entry):  # Handle textboxes
-                    print(f"Updating UI Field: {normalized_key} -> {value}")
+                if isinstance(widget, tk.Entry):
+                    print(
+                        f"Updating UI Field: "
+                        f"{normalized_key} -> {value}"
+                    )
+
                     widget.delete(0, tk.END)
                     widget.insert(0, value)
 
-                elif isinstance(widget, tk.StringVar):  # Handle dropdowns
-                    print(f"Updating Dropdown: {normalized_key} -> {value}")
-                    widget.set(value)  # Set dropdown value
+                elif isinstance(widget, tk.StringVar):
+                    print(
+                        f"Updating Dropdown: "
+                        f"{normalized_key} -> {value}"
+                    )
+
+                    widget.set(value)
 
                 elif normalized_key == "stay_open":
-                    print(f"Updating Checkbox: stay_open -> {value}")
-                    stay_open_var.set(value.lower() == "false")  # Correct inversion logic
-                    
+                    print(
+                        f"Updating Checkbox: "
+                        f"stay_open -> {value}"
+                    )
+
+                    stay_open_var.set(
+                        value.lower() == "false"
+                    )
+
                 elif normalized_key == "run_minimized":
-                    print(f"Updating Checkbox: run_minimized -> {value}")
-                    run_minimized_var.set(value.lower() == "true")
+                    print(
+                        f"Updating Checkbox: "
+                        f"run_minimized -> {value}"
+                    )
+
+                    run_minimized_var.set(
+                        value.lower() == "true"
+                    )
 
             else:
-                print(f"⚠️ WARNING: UI Entry Not Found for Key '{normalized_key}'")
+                print(
+                    f"⚠️ WARNING: UI Entry Not Found "
+                    f"for Key '{normalized_key}'"
+                )
 
     print("=== DEBUG: UI Update Completed ===")
-    detect_and_set_base_directory()
-    return config
 
+    detect_and_set_base_directory()
+
+    return config
 
 ### ==================  Write default configuration file ================== ###
 def write_default_config(config):
@@ -633,7 +979,8 @@ labels = {
     "Sapphire": "Sapphire Version:", # GBA Slot2  - Pokemon - Sapphire Version (.srm)
     "Emerald": "Emerald Version:", # GBA Slot3  - Pokemon - Emerald Version (.srm)
     "FireRed": "FireRed Version:", # GBA Slot4  - Pokemon - FireRed Version (.srm)
-    "LeafGreen": "LeafGreen Version:", # GBA Slot5  - Pokemon - LeafGreen Version (.srm)
+    "LeafGreen": "LeafGreen Version:", # GBA Slot5  - Pokemon - LeafGreen Version (.srm),
+    "Hack": "Hack:",
 }
 
 # Dropdown options
@@ -655,7 +1002,8 @@ label_colors = {
     "Sapphire": "#0047AB",
     "Emerald": "green",
     "FireRed": "#ff2a04",
-    "LeafGreen": "#228B22"
+    "LeafGreen": "#228B22",
+    "Hack": "#AB47BC"
 }
 
 # Dictionary to store entry fields
